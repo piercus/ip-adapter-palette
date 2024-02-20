@@ -1,2 +1,2 @@
 # ip-adapter-palette
-Train a color palette adapter using color-palette
+Train a color palette adapter using refiners
