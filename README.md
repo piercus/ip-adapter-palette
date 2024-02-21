@@ -1,6 +1,6 @@
 # ip-adapter-palette
 
-Train a color palette adapter using color-palette
+Train a color palette adapter using [refiners](https://github.com/finegrain-ai/refiners)
 
 ## Installation
 
@@ -54,4 +54,3 @@ NB : this is still WIP
 ```bash
 rye run python scripts/train.py configs/scheduled/finetune-color-palette-mlp-weighted.toml
 ```
-
