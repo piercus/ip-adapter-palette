@@ -5,5 +5,244 @@
 #   pre: false
 #   features: []
 #   all-features: false
+#   with-sources: false
 
 -e file:.
+aiohttp==3.9.3
+    # via datasets
+    # via fsspec
+aiosignal==1.3.1
+    # via aiohttp
+annotated-types==0.6.0
+    # via pydantic
+appdirs==1.4.4
+    # via wandb
+attrs==23.2.0
+    # via aiohttp
+bitsandbytes==0.42.0
+    # via refiners
+certifi==2024.2.2
+    # via requests
+    # via sentry-sdk
+charset-normalizer==3.3.2
+    # via requests
+click==8.1.7
+    # via wandb
+datasets==2.17.1
+    # via refiners
+diffusers==0.26.3
+dill==0.3.8
+    # via datasets
+    # via multiprocess
+docker-pycreds==0.4.0
+    # via wandb
+filelock==3.13.1
+    # via datasets
+    # via diffusers
+    # via huggingface-hub
+    # via torch
+    # via transformers
+    # via triton
+frozenlist==1.4.1
+    # via aiohttp
+    # via aiosignal
+fsspec==2023.10.0
+    # via datasets
+    # via fsspec
+    # via huggingface-hub
+    # via torch
+gitdb==4.0.11
+    # via gitpython
+gitpython==3.1.42
+    # via wandb
+huggingface-hub==0.20.3
+    # via datasets
+    # via diffusers
+    # via tokenizers
+    # via transformers
+idna==3.6
+    # via requests
+    # via yarl
+importlib-metadata==7.0.1
+    # via diffusers
+iniconfig==2.0.0
+    # via pytest
+jaxtyping==0.2.25
+    # via refiners
+jinja2==3.1.3
+    # via torch
+joblib==1.3.2
+    # via scikit-learn
+loguru==0.7.2
+    # via ip-adapter-palette
+    # via refiners
+markupsafe==2.1.5
+    # via jinja2
+mpmath==1.3.0
+    # via sympy
+multidict==6.0.5
+    # via aiohttp
+    # via yarl
+multiprocess==0.70.16
+    # via datasets
+networkx==3.2.1
+    # via torch
+nodeenv==1.8.0
+    # via pyright
+numpy==1.26.4
+    # via datasets
+    # via diffusers
+    # via ip-adapter-palette
+    # via jaxtyping
+    # via pandas
+    # via pyarrow
+    # via scikit-learn
+    # via scipy
+    # via torchvision
+    # via transformers
+nvidia-cublas-cu12==12.1.3.1
+    # via nvidia-cudnn-cu12
+    # via nvidia-cusolver-cu12
+    # via torch
+nvidia-cuda-cupti-cu12==12.1.105
+    # via torch
+nvidia-cuda-nvrtc-cu12==12.1.105
+    # via torch
+nvidia-cuda-runtime-cu12==12.1.105
+    # via torch
+nvidia-cudnn-cu12==8.9.2.26
+    # via torch
+nvidia-cufft-cu12==11.0.2.54
+    # via torch
+nvidia-curand-cu12==10.3.2.106
+    # via torch
+nvidia-cusolver-cu12==11.4.5.107
+    # via torch
+nvidia-cusparse-cu12==12.1.0.106
+    # via nvidia-cusolver-cu12
+    # via torch
+nvidia-nccl-cu12==2.19.3
+    # via torch
+nvidia-nvjitlink-cu12==12.3.101
+    # via nvidia-cusolver-cu12
+    # via nvidia-cusparse-cu12
+nvidia-nvtx-cu12==12.1.105
+    # via torch
+packaging==23.2
+    # via datasets
+    # via huggingface-hub
+    # via pytest
+    # via refiners
+    # via transformers
+pandas==2.2.0
+    # via datasets
+pillow==10.2.0
+    # via diffusers
+    # via ip-adapter-palette
+    # via refiners
+    # via torchvision
+pluggy==1.4.0
+    # via pytest
+prodigyopt==1.0
+    # via refiners
+protobuf==4.25.3
+    # via wandb
+psutil==5.9.8
+    # via wandb
+pyarrow==15.0.0
+    # via datasets
+pyarrow-hotfix==0.6
+    # via datasets
+pydantic==2.6.1
+    # via ip-adapter-palette
+    # via refiners
+pydantic-core==2.16.2
+    # via pydantic
+pyright==1.1.349
+pytest==8.0.1
+python-dateutil==2.8.2
+    # via pandas
+pytz==2024.1
+    # via pandas
+pyyaml==6.0.1
+    # via datasets
+    # via huggingface-hub
+    # via transformers
+    # via wandb
+refiners @ git+https://github.com/finegrain-ai/refiners.git@d199cd4f242ee33cff8ef9d6776bd171dac39434
+    # via ip-adapter-palette
+    # via refiners
+regex==2023.12.25
+    # via diffusers
+    # via transformers
+requests==2.31.0
+    # via datasets
+    # via diffusers
+    # via fsspec
+    # via huggingface-hub
+    # via torchvision
+    # via transformers
+    # via wandb
+ruff==0.2.2
+safetensors==0.4.2
+    # via diffusers
+    # via refiners
+    # via transformers
+scikit-learn==1.4.1.post1
+    # via ip-adapter-palette
+scipy==1.12.0
+    # via bitsandbytes
+    # via scikit-learn
+sentry-sdk==1.40.5
+    # via wandb
+setproctitle==1.3.3
+    # via wandb
+six==1.16.0
+    # via docker-pycreds
+    # via python-dateutil
+smmap==5.0.1
+    # via gitdb
+sympy==1.12
+    # via torch
+threadpoolctl==3.3.0
+    # via scikit-learn
+tokenizers==0.15.2
+    # via transformers
+tomli==2.0.1
+    # via refiners
+torch==2.2.0
+    # via refiners
+    # via torchvision
+torchvision==0.17.0
+    # via refiners
+tqdm==4.66.2
+    # via datasets
+    # via huggingface-hub
+    # via transformers
+transformers==4.38.0
+triton==2.2.0
+    # via torch
+typeguard==2.13.3
+    # via jaxtyping
+typing-extensions==4.9.0
+    # via huggingface-hub
+    # via jaxtyping
+    # via pydantic
+    # via pydantic-core
+    # via torch
+tzdata==2024.1
+    # via pandas
+urllib3==2.2.1
+    # via requests
+    # via sentry-sdk
+wandb==0.16.3
+    # via refiners
+xxhash==3.4.1
+    # via datasets
+yarl==1.9.4
+    # via aiohttp
+zipp==3.17.0
+    # via importlib-metadata
+setuptools==69.1.0
+    # via nodeenv
+    # via wandb

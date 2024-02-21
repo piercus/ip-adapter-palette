@@ -1,11 +1,12 @@
 from functools import cached_property
+from typing import cast, Any
 from loguru import logger
 import random
-from ip_adapter_lora.callback import (
+from ip_adapter_palette.callback import (
     SaveBestModel,
     SaveBestModelConfig,
 )
-from ip_adapter_lora.latent_diffusion import SD1TrainerMixin
+from ip_adapter_palette.latent_diffusion import SD1TrainerMixin
 from refiners.fluxion import load_from_safetensors
 from refiners.fluxion.utils import no_grad
 from ip_adapter_palette.palette_adapter import SD1PaletteAdapter, PaletteEncoder
@@ -24,6 +25,12 @@ from torch.nn import functional as F
 
 from ip_adapter_palette.types import BatchInput
 from ip_adapter_palette.config import PaletteEncoderConfig
+from refiners.training_utils.huggingface_datasets import load_hf_dataset
+
+from torch.utils.data import DataLoader, Dataset
+
+from datasets import load_dataset, DownloadManager, Image
+
 
 class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     
@@ -48,7 +55,10 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     @register_model()
     def ip_adapter(self, config: IPAdapterConfig) -> SD1PaletteAdapter[SD1UNet]:
         logger.info("Loading IP Adapter.")
-        weights = load_from_safetensors(config.weights)
+        if config.weights is not None:
+            weights = load_from_safetensors(config.weights)
+        else:
+            weights = None
         
         ip_adapter = SD1PaletteAdapter(
             self.unet,
@@ -118,7 +128,7 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
 
     @property
     def dataset_length(self) -> int:
-        return len(self.data)
+        return len(self.hf_dataset)
 
     def compute_loss(self, batch: BatchInput) -> torch.Tensor:
         source_latents, text_embeddings, source_palettes = (
@@ -142,6 +152,66 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         prediction = self.unet(noisy_latents)
         loss = F.mse_loss(input=prediction, target=noise)
         return loss
+    
+    @cached_property
+    def hf_dataset(self) -> Dataset:
+        hf_dataset = load_hf_dataset(
+            self.config.dataset.hf_repo,
+            self.config.dataset.revision,
+            self.config.dataset.split,
+            self.config.dataset.use_verification
+        )
+        def download_image(url: str | list[str], dl_manager: DownloadManager):
+            img = dl_manager.download(url)
+            return {"image": img}
 
+        hf_dataset = hf_dataset.map(
+            function=download_image,
+            input_columns=["photo_image_url"],
+            fn_kwargs={
+                "dl_manager": DownloadManager(),
+            },
+            batched=True,
+            num_proc=4,
+        )
+        hf_dataset = hf_dataset.cast_column(
+            column="image",
+            feature=Image(),
+        )
+        return cast(Dataset, hf_dataset)
+    
+    def precompute(self) -> None:
+        def collate_fn(batch: list) -> Any:
+           
+            return {
+                "photo_id": [item["photo_id"] for item in batch],
+                "image": [item["image"] for item in batch],
+                "caption": [item["caption"] for item in batch]
+            }
+        
+        dataloader = DataLoader(
+            dataset=self.hf_dataset, 
+            batch_size=self.config.training.batch_size, 
+            collate_fn=collate_fn
+        )
+        
+        for batch in dataloader:
+            self.precompute_batch(batch)
+    
+    def precompute_batch(self, batch: list) -> None:
+        folder = self.config.data
+        for (photo_id, image, caption) in zip(batch['photo_id'], batch['image'], batch['caption']):
+            
+            latents = self.lda.image_to_latents(image)
+            text_embedding = self.text_encoder(caption)
+            filename = folder / f"{photo_id}.pt"
+            torch.save(
+                {
+                    "latents": latents,
+                    "text_embedding": text_embedding
+                },
+                filename
+            )
+        
     def compute_evaluation(self) -> None:
         raise NotImplementedError("Evaluation not implemented.")
