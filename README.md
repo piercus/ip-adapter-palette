@@ -18,7 +18,7 @@ rye sync
 
 ### Download weights
 
-We download the script from refiners, 
+Download the scripts from refiners, 
 
 ```bash
 wget https://raw.githubusercontent.com/finegrain-ai/refiners/main/scripts/conversion/convert_transformers_clip_text_model.py -O scripts/convert_transformers_clip_text_model.py
