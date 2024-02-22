@@ -1,5 +1,5 @@
 from calendar import c
-from ip_adapter_palette.utils import AbstractBatchInput, AbstractBatchOutput, Batch
+from ip_adapter_palette.utils import Batch
 from PIL import Image
 from typing import TypedDict
 from torch import load as torch_load, Tensor
