@@ -354,30 +354,57 @@ class PaletteEncoder(fl.Chain):
         return cat(tensors=(negative_embedding, conditional_embedding), dim=0)
     
 class PaletteCrossAttention(fl.Chain):
-    def __init__(self, text_cross_attention: fl.Attention, embedding_dim: int = 768, scale: float = 1.0) -> None:
+    def __init__(self, text_cross_attention: fl.Attention, embedding_dim: int = 768, lora_rank: int | None = None, scale: float = 1.0) -> None:
         self._scale = scale
+        self._lora_rank = lora_rank
+
+        if self._lora_rank is not None:
+
+            if text_cross_attention.use_bias:
+                raise ValueError("Lora rank can only be used with bias=False")
+            
+            layer_key = fl.LinearLora(
+                in_features=embedding_dim,
+                out_features=text_cross_attention.inner_dim,
+                rank=self._lora_rank,
+                bias=text_cross_attention.use_bias,
+                device=text_cross_attention.device,
+                dtype=text_cross_attention.dtype,
+            )
+            layer_value = fl.LinearLora(
+                in_features=embedding_dim,
+                out_features=text_cross_attention.inner_dim,
+                rank=self._lora_rank,
+                bias=text_cross_attention.use_bias,
+                device=text_cross_attention.device,
+                dtype=text_cross_attention.dtype,
+            )
+        else:
+            layer_key = fl.Linear(
+                in_features=embedding_dim,
+                out_features=text_cross_attention.inner_dim,
+                bias=text_cross_attention.use_bias,
+                device=text_cross_attention.device,
+                dtype=text_cross_attention.dtype,
+            )
+            layer_value = fl.Linear(
+                in_features=embedding_dim,
+                out_features=text_cross_attention.inner_dim,
+                bias=text_cross_attention.use_bias,
+                device=text_cross_attention.device,
+                dtype=text_cross_attention.dtype,
+            )
+        
         super().__init__(
             fl.Distribute(
                 fl.Identity(),
                 fl.Chain(
                     fl.UseContext(context="ip_adapter", key="palette_embedding"),
-                    fl.Linear(
-                        in_features=embedding_dim,
-                        out_features=text_cross_attention.inner_dim,
-                        bias=text_cross_attention.use_bias,
-                        device=text_cross_attention.device,
-                        dtype=text_cross_attention.dtype,
-                    ),
+                    layer_key,
                 ),
                 fl.Chain(
                     fl.UseContext(context="ip_adapter", key="palette_embedding"),
-                    fl.Linear(
-                        in_features=embedding_dim,
-                        out_features=text_cross_attention.inner_dim,
-                        bias=text_cross_attention.use_bias,
-                        device=text_cross_attention.device,
-                        dtype=text_cross_attention.dtype,
-                    ),
+                    layer_value,
                 ),
             ),
             ScaledDotProductAttention(
