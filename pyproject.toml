@@ -8,13 +8,13 @@ authors = [
 dependencies = [
     "refiners[training] @ git+https://github.com/finegrain-ai/refiners.git@d199cd4f242ee33cff8ef9d6776bd171dac39434",
     "loguru>=0.7.2",
-    "numpy>=1.26.4",
+    "numpy>=1.24.4",
     "Pillow>=10.2.0",
     "pydantic>=2.6.1",
     "scikit-learn>=1.4.1.post1",
 ]
 readme = "README.md"
-requires-python = ">= 3.8"
+requires-python = ">= 3.10"
 
 [build-system]
 requires = ["hatchling"]
