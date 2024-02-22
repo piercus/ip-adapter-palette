@@ -17,6 +17,8 @@ annotated-types==0.6.0
     # via pydantic
 appdirs==1.4.4
     # via wandb
+async-timeout==4.0.3
+    # via aiohttp
 attrs==23.2.0
     # via aiohttp
 bitsandbytes==0.42.0
@@ -36,6 +38,8 @@ dill==0.3.8
     # via multiprocess
 docker-pycreds==0.4.0
     # via wandb
+exceptiongroup==1.2.0
+    # via pytest
 filelock==3.13.1
     # via datasets
     # via diffusers
@@ -209,6 +213,7 @@ threadpoolctl==3.3.0
 tokenizers==0.15.2
     # via transformers
 tomli==2.0.1
+    # via pytest
     # via refiners
 torch==2.2.0
     # via refiners

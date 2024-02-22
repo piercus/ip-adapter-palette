@@ -1,4 +1,4 @@
-data = "./tmp/weights/"
+data = "./weights/embeddings/"
 [wandb]
 mode = "disabled" # "online", "offline", "disabled"
 entity = "piercus"
@@ -7,9 +7,9 @@ name = "weighted-palette"
 tags = ["reload-ckpt", "weighted-palette"]
 
 [sd]
-unet = "weights/unet.safetensors"
-text_encoder = "weights/CLIPTextEncoderL.safetensors"
-lda = "weights/lda.safetensors"
+unet = "weights/models/unet.safetensors"
+text_encoder = "weights/models/CLIPTextEncoderL.safetensors"
+lda = "weights/models/lda.safetensors"
 
 [latent_diffusion]
 unconditional_sampling_probability = 0.1
@@ -52,11 +52,7 @@ warmup = "500:step"
 hf_repo = "refiners/unsplash-25k-cogvlm-captions"
 revision = "main"
 resize_image_max_size = 512
-split = "train[:200]"
-
-# [checkpointing]
-# save_interval = "5000:step"
-# use_wandb = true
+split = "train[200:]"
 
 [eval_dataset]
 hf_repo = "1aurent/unsplash-lite-palette"

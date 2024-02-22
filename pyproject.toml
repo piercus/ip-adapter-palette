@@ -7,6 +7,7 @@ authors = [
 ]
 dependencies = [
     "refiners[training] @ git+https://github.com/finegrain-ai/refiners.git@d199cd4f242ee33cff8ef9d6776bd171dac39434",
+    #"refiners[training]",
     "loguru>=0.7.2",
     "numpy>=1.24.4",
     "Pillow>=10.2.0",

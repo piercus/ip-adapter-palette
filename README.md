@@ -21,16 +21,17 @@ rye sync
 Download the scripts from refiners, 
 
 ```bash
-wget https://raw.githubusercontent.com/finegrain-ai/refiners/main/scripts/conversion/convert_transformers_clip_text_model.py -O scripts/convert_transformers_clip_text_model.py
-wget https://raw.githubusercontent.com/finegrain-ai/refiners/main/scripts/conversion/convert_diffusers_autoencoder_kl.py -O scripts/convert_diffusers_autoencoder_kl.py
-wget https://raw.githubusercontent.com/finegrain-ai/refiners/main/scripts/conversion/convert_diffusers_unet.py -O scripts/convert_diffusers_unet.py
-
+# this commit should match with the one in pyproject.toml
+export COMMIT=d199cd4f242ee33cff8ef9d6776bd171dac39434
+wget https://raw.githubusercontent.com/finegrain-ai/refiners/${COMMIT}/scripts/conversion/convert_transformers_clip_text_model.py -O scripts/convert_transformers_clip_text_model.py
+wget https://raw.githubusercontent.com/finegrain-ai/refiners/${COMMIT}/scripts/conversion/convert_diffusers_autoencoder_kl.py -O scripts/convert_diffusers_autoencoder_kl.py
+wget https://raw.githubusercontent.com/finegrain-ai/refiners/${COMMIT}/scripts/conversion/convert_diffusers_unet.py -O scripts/convert_diffusers_unet.py
 ```
 And run them locally to download the weights
 ```bash
-rye run python scripts/convert_transformers_clip_text_model.py --to weights/CLIPTextEncoderL.safetensors
-rye run python scripts/convert_diffusers_autoencoder_kl.py --to weights/lda.safetensors
-rye run python scripts/convert_diffusers_unet.py --to weights/unet.safetensors
+rye run python scripts/convert_transformers_clip_text_model.py --to weights/models/CLIPTextEncoderL.safetensors
+rye run python scripts/convert_diffusers_autoencoder_kl.py --to weights/models/lda.safetensors
+rye run python scripts/convert_diffusers_unet.py --to weights/models/unet.safetensors
 ```
 
 ## Train

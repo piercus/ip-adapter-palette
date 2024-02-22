@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import cast, Any
+from typing import cast, Any, Callable
 from loguru import logger
 import random
 from ip_adapter_palette.callback import (
@@ -14,6 +14,7 @@ from refiners.training_utils import (
     register_model,
     register_callback,
 )
+import os
 from ip_adapter_palette.config import Config, IPAdapterConfig
 
 from refiners.foundationals.latent_diffusion.stable_diffusion_1.unet import SD1UNet
@@ -21,7 +22,8 @@ from refiners.foundationals.latent_diffusion.stable_diffusion_1.unet import SD1U
 from refiners.training_utils.trainer import Trainer
 from refiners.training_utils.wandb import WandbMixin
 import torch
-from torch.nn import functional as F
+from torch.nn import functional as F, Module as TorchModule
+from torchvision.transforms import Compose, RandomCrop, RandomHorizontalFlip, ColorJitter, RandomGrayscale
 
 from ip_adapter_palette.types import BatchInput
 from ip_adapter_palette.config import PaletteEncoderConfig
@@ -29,11 +31,59 @@ from refiners.training_utils.huggingface_datasets import load_hf_dataset
 
 from torch.utils.data import DataLoader, Dataset
 
-from datasets import load_dataset, DownloadManager, Image
+from datasets import load_dataset, DownloadManager, Image as DatasetImage
+from loguru import logger
+from PIL import Image
+from tqdm import tqdm
 
+def resize_image(image: Image.Image, min_size: int = 512, max_size: int = 576) -> Image.Image:
+    image_min_size = min(image.size)
+    if image_min_size > max_size:
+        if image_min_size == image.size[0]:
+            image = image.resize(size=(max_size, int(max_size * image.size[1] / image.size[0])))
+        else:
+            image = image.resize(size=(int(max_size * image.size[0] / image.size[1]), max_size))
+    if image_min_size < min_size:
+        if image_min_size == image.size[0]:
+            image = image.resize(size=(min_size, int(min_size * image.size[1] / image.size[0])))
+        else:
+            image = image.resize(size=(int(min_size * image.size[0] / image.size[1]), min_size))
+    return image
+
+class ResizeImage(TorchModule):
+    def __init__(self, size: int = 512) -> None:
+        super().__init__()
+        self.size = size
+
+    def forward(self, image: Image.Image) -> Image.Image:
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        return resize_image(image, self.size)
 
 class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
-    
+    def __init__(self, config: Config) -> None:
+        super().__init__(config)
+        self.process_image = self.build_image_processor()
+
+    def build_image_processor(self) -> Callable[[Image.Image], Image.Image]:
+        # TODO: make this configurable and add other transforms
+        transforms: list[TorchModule] = [
+            ResizeImage(size=self.config.dataset.resize_image_max_size)
+        ]
+        # Commenting cause adding random config will make the embeddings not reproducible
+        #
+        # if self.config.random_crop:
+        #     transforms.append(RandomCrop(size=512))
+        # if self.config.horizontal_flip:
+        #     transforms.append(RandomHorizontalFlip(p=0.5))
+        # if self.config.color_jitter is not None:
+        #     transforms.append(ColorJitter(brightness=self.config.color_jitter.brightness, contrast=self.config.color_jitter.contrast, saturation=self.config.color_jitter.saturation, hue=self.config.color_jitter.hue))
+        # if self.config.grayscale > 0:
+        #     transforms.append(RandomGrayscale(p=self.config.grayscale))            
+        # if not transforms:
+        #     return lambda image: image
+        return Compose(transforms)
+
     @register_model()
     def palette_encoder(self, config: PaletteEncoderConfig) -> PaletteEncoder:
         logger.info("Loading Palette Encoder.")
@@ -172,15 +222,15 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
                 "dl_manager": DownloadManager(),
             },
             batched=True,
-            num_proc=4,
+            num_proc=os.cpu_count()
         )
         hf_dataset = hf_dataset.cast_column(
             column="image",
-            feature=Image(),
+            feature=DatasetImage(),
         )
         return cast(Dataset, hf_dataset)
     
-    def precompute(self) -> None:
+    def precompute(self, batch_size: int=1, force: bool=False) -> None:
         def collate_fn(batch: list) -> Any:
            
             return {
@@ -191,20 +241,24 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         
         dataloader = DataLoader(
             dataset=self.hf_dataset, 
-            batch_size=self.config.training.batch_size, 
+            batch_size=batch_size, 
             collate_fn=collate_fn
         )
         
-        for batch in dataloader:
-            self.precompute_batch(batch)
+        for batch in tqdm(dataloader):
+            self.precompute_batch(batch, force)
     
-    def precompute_batch(self, batch: list) -> None:
+    def precompute_batch(self, batch: list, force: bool) -> None:
         folder = self.config.data
         for (photo_id, image, caption) in zip(batch['photo_id'], batch['image'], batch['caption']):
-            
-            latents = self.lda.image_to_latents(image)
-            text_embedding = self.text_encoder(caption)
             filename = folder / f"{photo_id}.pt"
+
+            if filename.exists() and not force:
+                logger.debug(f"Skipping {filename}. Already exists, change this behavior with --force.")
+                continue
+            
+            latents = self.lda.image_to_latents(self.process_image(image))
+            text_embedding = self.text_encoder(caption)
             torch.save(
                 {
                     "latents": latents,
