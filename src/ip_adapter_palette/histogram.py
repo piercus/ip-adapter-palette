@@ -25,11 +25,11 @@ from refiners.fluxion.adapters.adapter import Adapter
 from refiners.fluxion.layers.attentions import ScaledDotProductAttention
 from refiners.fluxion.utils import images_to_tensor
 from refiners.foundationals.clip.common import FeedForward, PositionalEncoder
-from refiners.foundationals.clip.image_encoder import ClassToken, PositionalEncoder, TransformerLayer
-from refiners.foundationals.dinov2.vit import FeedForward
+from refiners.foundationals.clip.image_encoder import ClassToken, TransformerLayer
+from refiners.foundationals.clip.common import PositionalEncoder, FeedForward
 from refiners.foundationals.latent_diffusion.stable_diffusion_1.unet import SD1UNet
 from refiners.foundationals.latent_diffusion.stable_diffusion_xl.unet import SDXLUNet
-
+from ip_adapter_palette.layers import ViT3dEmbeddings
 
 def images_to_histo_channels(images: List[Image.Image], color_bits: int = 8) -> List[Tensor]:
     img_tensor = images_to_tensor(images)
@@ -242,72 +242,6 @@ class HistogramExtractor(fl.Chain):
     
     def images_to_histograms(self, images: List[Image.Image], device: Device | None = None, dtype : DType | None = None) -> Tensor:
         return self(images_to_tensor(images, device=device, dtype = dtype))
-
-
-class Patch3dEncoder(fl.Chain):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        patch_size: int = 8,
-        use_bias: bool = True,
-        device: Device | str | None = None,
-        dtype: DType | None = None,
-    ) -> None:
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.patch_size = patch_size
-        self.use_bias = use_bias
-        super().__init__(
-            fl.Conv3d(
-                in_channels=self.in_channels,
-                out_channels=self.out_channels,
-                kernel_size=(self.patch_size, self.patch_size, self.patch_size),
-                stride=(self.patch_size, self.patch_size, self.patch_size),
-                use_bias=self.use_bias,
-                device=device,
-                dtype=dtype,
-            ),
-        )
-
-
-class ViT3dEmbeddings(fl.Chain):
-    def __init__(
-        self,
-        cube_size: int = 256,
-        embedding_dim: int = 768,
-        patch_size: int = 8,
-        device: Device | str | None = None,
-        dtype: DType | None = None,
-    ) -> None:
-        self.cube_size = cube_size
-        self.embedding_dim = embedding_dim
-        self.patch_size = patch_size
-        super().__init__(
-            fl.Concatenate(
-                ClassToken(embedding_dim, device=device, dtype=dtype),
-                fl.Chain(
-                    Patch3dEncoder(
-                        in_channels=1,
-                        out_channels=embedding_dim,
-                        patch_size=patch_size,
-                        use_bias=False,
-                        device=device,
-                        dtype=dtype,
-                    ),
-                    fl.Reshape((cube_size // patch_size) ** 3, embedding_dim),
-                ),
-                dim=1,
-            ),
-            fl.Residual(
-                PositionalEncoder(
-                    max_sequence_length=(cube_size // patch_size) ** 3 + 1,
-                    embedding_dim=embedding_dim,
-                    device=device,
-                    dtype=dtype,
-                ),
-            ),
-        )
 
 
 class HistogramEncoder(fl.Chain):

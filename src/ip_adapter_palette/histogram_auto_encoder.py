@@ -5,7 +5,8 @@ from refiners.fluxion.layers import Chain
 from refiners.fluxion.layers.basics import Reshape, Squeeze, Unsqueeze
 from refiners.fluxion.layers.converter import Converter
 from refiners.fluxion.layers.module import Module
-from refiners.foundationals.latent_diffusion.auto_encoder import Decoder, Encoder
+from ip_adapter_palette.layers import Decoder, Encoder
+
 
 class LogSoftmax(_LogSoftmax, Module):
     pass

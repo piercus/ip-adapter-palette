@@ -61,7 +61,7 @@ class AbstractBatchInput:
         return cls(**opts)
     
     @classmethod
-    def empty(cls) -> "AbstractBatchInput":
+    def empty(cls: "Type[InputType]") -> "InputType":
         opts : dict[str, CollatableProps] = {}
         
         for key in cls._list_keys:

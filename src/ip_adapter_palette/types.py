@@ -14,7 +14,8 @@ class ImageAndPalette(TypedDict):
 class BatchInput(AbstractBatchInput):
     _list_keys: list[str] = ["source_palettes", "source_prompts", "source_images", "db_indexes"]
     _tensor_keys: dict[str, tuple[int, ...]] = {
-        "text_embeddings": (77, 768)
+        "text_embeddings": (77, 768),
+        "latents": (8, 64, 64)
     }
     @classmethod
     def load_file(cls, file_path: str) -> "BatchInput":
@@ -26,3 +27,4 @@ class BatchOutput(AbstractBatchOutput[BatchInput]):
         "text_embeddings": (77, 768),
         "result_images": (3, 512, 512)
     }
+
