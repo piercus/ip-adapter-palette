@@ -10,8 +10,10 @@ from ip_adapter_palette.latent_diffusion import SD1TrainerMixin
 from refiners.fluxion import load_from_safetensors
 from refiners.fluxion.utils import no_grad
 from ip_adapter_palette.palette_adapter import SD1PaletteAdapter, PaletteEncoder, PaletteExtractor, Palette, Color
-from ip_adapter_palette.histogram import HistogramDistance, histogram_to_histo_channels
+from ip_adapter_palette.histogram import HistogramDistance, HistogramExtractor, histogram_to_histo_channels
 from ip_adapter_palette.metrics.palette import batch_image_palette_metrics, ImageAndPalette
+
+
 
 from refiners.training_utils import (
     register_model,
@@ -125,19 +127,16 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             item = BatchInput(
                 source_palettes = self.unconditional_palette,
                 source_prompts = self.unconditional_text_embedding,
-                source_images = item['source_images'],
-                source_latents = item['source_latents'],
-                db_indexes = item['db_indexes'],
-                text_embeddings = item['text_embeddings']
+                source_images = item.source_images,
+                source_latents = item.source_latents,
+                db_indexes = item.db_indexes,
+                source_text_embeddings = item.source_text_embeddings,
+                source_histograms = item.source_histograms
             )
         return item
 
-    @classmethod
-    def load_file(cls, file_path: str) -> "BatchInput":
-        return BatchInput.load_file(file_path)
-
-    def collate_fn(self, batch: list[BatchInput]) -> BatchInput:
-        return BatchInput.collate_fn(batch)
+    def collate(self, batch: list[BatchInput]) -> BatchInput:
+        return BatchInput.collate(batch)
 
     @property
     def dataset_length(self) -> int:
@@ -145,9 +144,9 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
 
     def compute_loss(self, batch: BatchInput) -> torch.Tensor:
         source_latents, text_embeddings, source_palettes = (
-            batch['source_latents'],
-            batch['text_embeddings'],
-            batch['source_palettes']
+            batch.source_latents,
+            batch.source_text_embeddings,
+            batch.source_palettes
         )
         if type(text_embeddings) is not torch.Tensor:
             raise ValueError(f"Text embeddings should be a tensor, not {type(text_embeddings)}")
@@ -172,6 +171,8 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             hf_dataset_config=self.config.train_dataset,
             lda=self.lda,
             text_encoder=self.text_encoder,
+            palette_extractor=self.palette_extractor,
+            histogram_extractor=self.histogram_extractor,
             folder=self.config.data
         )
     
@@ -184,9 +185,7 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         
         per_prompts : dict[str, BatchOutput] = {}
         images : dict[str, WandbLoggable] = {}
-        
-        all_results : BatchOutput = BatchOutput.empty()
-        
+                
         for batch in self.eval_dataloader:
             results = self.compute_batch_evaluation(batch)
         
@@ -195,7 +194,7 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
                 if prompt not in per_prompts:
                     per_prompts[prompt] = batch
                 else:
-                    per_prompts[prompt] = BatchOutput.collate_fn([
+                    per_prompts[prompt] = BatchOutput.collate([
                         per_prompts[prompt],
                         batch
                     ])
@@ -208,7 +207,7 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             image_name = f"eval_images/{prompt}"
             images[image_name] = image
             
-        all_results = BatchOutput.collate_fn(list(per_prompts.values()))
+        all_results = BatchOutput.collate(list(per_prompts.values()))
         
         # images[f"eval_images/all"] = self.draw_cover_image(all_results)
         self.wandb_log(data=images)
@@ -216,7 +215,7 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         self.batch_metrics(all_results, prefix="eval")
 
     def image_distances(self, batch: BatchOutput) -> float:
-        images = batch["result_images"]
+        images = batch.result_images
         if type(images) is not torch.Tensor:
             raise ValueError(f"Images should be a tensor, not {type(images)}")
         dist = tensor(0)
@@ -226,7 +225,7 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         
         return dist.item()
     @cached_property
-    def color_palette_extractor(self) -> PaletteExtractor:
+    def palette_extractor(self) -> PaletteExtractor:
         return PaletteExtractor(
             size=self.config.color_palette.max_colors,
             weighted_palette=self.config.color_palette.weighted_palette
@@ -247,11 +246,11 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     
     def batch_metrics(self, results: BatchOutput, prefix: str = "palette-img") -> None:
         palettes : list[list[Color]] = []
-        for p in results["source_palettes"]:
+        for p in results.source_palettes:
             p = cast(Palette, p)
             palettes.append([cluster[0] for cluster in p])
         
-        images = tensor_to_images(cast(Tensor, results["result_images"]))
+        images = tensor_to_images(cast(Tensor, results.result_images))
         
         batch_image_palette_metrics(
             self.wandb_log, 
@@ -262,9 +261,9 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             prefix
         )
 
-        result_histo = cast(Tensor, results["result_histograms"])
+        result_histo = cast(Tensor, results.result_histograms)
         
-        histo_metrics = self.histogram_distance.metrics(result_histo, cast(Tensor, results["source_histograms"]).to(result_histo.device))
+        histo_metrics = self.histogram_distance.metrics(result_histo, cast(Tensor, results.source_histograms).to(result_histo.device))
         
         log_dict : dict[str, WandbLoggable] = {}
         for (key, value) in histo_metrics.items():
@@ -275,6 +274,9 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     @cached_property
     def histogram_distance(self) -> HistogramDistance:
         return HistogramDistance(color_bits=self.config.evaluation.color_bits)
+    @cached_property
+    def histogram_extractor(self) -> HistogramExtractor:
+        return HistogramExtractor(color_bits=6)
     
     @cached_property
     def grid_eval_dataset(self) -> GridEvalDataset:
@@ -282,6 +284,8 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             hf_dataset_config=self.config.eval_dataset,
             lda=self.lda,
             text_encoder=self.text_encoder,
+            palette_extractor=self.palette_extractor,
+            histogram_extractor=self.histogram_extractor,
             folder=self.config.data,
             db_indexes=self.config.evaluation.db_indexes,
             prompts=self.config.evaluation.prompts
@@ -293,22 +297,22 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             dataset=self.grid_eval_dataset, 
             batch_size=self.config.evaluation.batch_size, 
             shuffle=False,
-            collate_fn=BatchInput.collate_fn, 
+            collate_fn=BatchInput.collate, 
             num_workers=self.config.training.num_workers
         )
 
     def eval_set_adapter_values(self, batch: BatchInput) -> None:
         self.ip_adapter.set_palette_embedding(
             self.palette_encoder.compute_palette_embedding(
-                cast(list[Palette], batch['source_palettes'])
+                cast(list[Palette], batch.source_palettes)
             )
         )
     
     @scoped_seed(5)
     def compute_batch_evaluation(self, batch: BatchInput, same_seed: bool = True) -> BatchOutput:
-        batch_size = len(batch["source_prompts"])
+        batch_size = len(batch.source_prompts)
         
-        logger.info(f"Generating {batch_size} images for prompts/db_indexes: {batch['source_prompts']}/{batch['db_indexes']}")
+        logger.info(f"Generating {batch_size} images for prompts/db_indexes: {batch.source_prompts}/{batch.db_indexes}")
         
         if same_seed:
             x = randn(1, 4, 64, 64, dtype=self.dtype, device=self.device)
@@ -318,7 +322,7 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
 
         self.eval_set_adapter_values(batch)
         
-        clip_text_embedding = batch["text_embeddings"]
+        clip_text_embedding = batch.source_text_embeddings
         
         for step in self.sd.steps:
             x = self.sd(
@@ -336,11 +340,11 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     
     
     def draw_palette_cover_image(self, batch: BatchOutput) -> Image.Image:
-        res_images = cast(Tensor, batch["result_images"])
+        res_images = cast(Tensor, batch.result_images)
         (batch_size, _, height, width) = res_images.shape
         
         palette_img_size = width // self.config.color_palette.max_colors
-        source_images = cast(list[Image.Image], batch['source_images'])
+        source_images = cast(list[Image.Image], batch.source_images)
 
         join_canvas_image: Image.Image = Image.new(
             mode="RGB", size=(2*width, (height+palette_img_size) * batch_size)
@@ -350,8 +354,8 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         for i, image in enumerate(images):
             join_canvas_image.paste(source_images[i], box=(0, i*(height+palette_img_size)))
             join_canvas_image.paste(image, box=(width, i*(height+palette_img_size)))
-            palette_out = cast(list[Palette], batch["result_palettes"])[i]
-            palette_int = cast(list[Palette], batch["source_palettes"])[i]
+            palette_out = cast(list[Palette], batch.result_palettes)[i]
+            palette_int = cast(list[Palette], batch.source_palettes)[i]
             palette_out_img = self.draw_palette(palette_out, width, palette_img_size)
             palette_in_img = self.draw_palette(palette_int, width, palette_img_size)
             
@@ -383,15 +387,15 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         return histo_img
     
     def draw_histogram_cover_image(self, batch: BatchOutput) -> Image.Image:
-        res_images = cast(Tensor, batch["result_images"])
+        res_images = cast(Tensor, batch.result_images)
         (batch_size, channels, height, width) = res_images.shape
 
         vertical_image = res_images.permute(0,2,3,1).reshape(1, height*batch_size, width, channels).permute(0,3,1,2)
         
-        results_histograms = cast(Tensor, batch['result_histograms'])
-        source_histograms = cast(Tensor, batch['source_histograms'])
-        source_images = cast(list[Image.Image], batch['source_images'])
-        src_palettes = cast(list[Palette], batch['source_palettes'])
+        results_histograms = cast(Tensor, batch.result_histograms)
+        source_histograms = batch.source_histograms
+        source_images = batch.source_images
+        src_palettes = cast(list[Palette], batch.source_palettes)
 
         join_canvas_image: Image.Image = Image.new(
             mode="RGB", size=(width + width//2, height * batch_size)
@@ -406,17 +410,18 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         colors = ["red", "green", "blue"]
         
         for i in range(batch_size):
-            join_canvas_image.paste(source_images[i].resize((width//2, height//2)), box=(0, height *i))
+            image = tensor_to_image(source_images[i])
+            join_canvas_image.paste(image.resize((width//2, height//2)), box=(0, height *i))
             
             source_image_palette = self.draw_palette(
-                self.color_palette_extractor.from_histogram(source_histograms[i], color_bits= self.config.histogram_auto_encoder.color_bits, size=len(src_palettes[i])),
+                self.palette_extractor.from_histogram(source_histograms[i], color_bits= self.config.histogram_auto_encoder.color_bits, size=len(src_palettes[i])),
                 width//2,
                 height//16
             )
             join_canvas_image.paste(source_image_palette, box=(0, height *i + height//2))
             
             res_image_palette = self.draw_palette(
-                self.color_palette_extractor.from_histogram(results_histograms[i], color_bits= self.config.histogram_auto_encoder.color_bits, size=len(src_palettes[i])),
+                self.palette_extractor.from_histogram(results_histograms[i], color_bits= self.config.histogram_auto_encoder.color_bits, size=len(src_palettes[i])),
                 width//2,
                 height//16
             )
