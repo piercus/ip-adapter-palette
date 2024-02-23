@@ -13,6 +13,3 @@ if __name__ == "__main__":
     config = Config.load_from_toml(args.config)
     trainer = SD1IPPalette(config)
     trainer.precompute(batch_size=args.batch_size, force=args.force)
-
-    trainer = SD1IPPalette(config)  # , callbacks=[OffloadToCPU(), SaveBestModel()])
-    trainer.precompute(batch_size=args.batch_size, force=args.force)

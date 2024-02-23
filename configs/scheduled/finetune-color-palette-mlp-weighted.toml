@@ -1,10 +1,10 @@
 data = "./weights/embeddings/"
 [wandb]
-mode = "disabled" # "online", "offline", "disabled"
+mode = "offline" # "online", "offline", "disabled"
 entity = "piercus"
 project = "color-palette"
-name = "weighted-palette"
-tags = ["reload-ckpt", "weighted-palette"]
+name = "wpalette-overfit"
+tags = ["reload-ckpt", "weighted-palette", "embeddings"]
 
 [sd]
 unet = "weights/models/unet.safetensors"
@@ -24,7 +24,7 @@ embedding_dim = 10
 weighted_palette = true
 
 [training]
-duration = "5:epoch"
+duration = "1000:epoch"
 seed = 0
 batch_size = 10
 gradient_accumulation = "1:step"
@@ -52,21 +52,21 @@ warmup = "500:step"
 hf_repo = "refiners/unsplash-25k-cogvlm-captions"
 revision = "main"
 resize_image_max_size = 512
-split = "train[200:]"
+split = "train[200:400]"
 
 [eval_dataset]
-hf_repo = "1aurent/unsplash-lite-palette"
+hf_repo = "refiners/unsplash-25k-cogvlm-captions"
 revision = "main"
 resize_image_max_size = 512
 caption_key = "ai_description"
-split = "train[:20]"
+split = "train[:4]"
 
 [evaluation]
 batch_size = 4
 num_inference_steps = 30
 color_bits = 4
 use_short_prompts = false
-db_indexes = [0, 1, 2, 3, 4, 5, 6, 7, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+db_indexes = [0, 1, 2, 3]#, 4, 5, 6, 7, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
 prompts = [
      "A Bustling City Street",
      "A cute cat",

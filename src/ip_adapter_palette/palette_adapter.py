@@ -216,22 +216,27 @@ class PaletteExtractor:
         pixels = image_np.reshape(-1, 3)
         return self.from_pixels(pixels, size)
 
-    def from_pixels(self, pixels: np.ndarray[int, Any], size: int | None = None) -> Palette:
+    def from_pixels(self, pixels: np.ndarray[int, Any], size: int | None = None, eps : float = 1e-7) -> Palette:
         kmeans = KMeans(n_clusters=size).fit(pixels) # type: ignore 
         counts = np.unique(kmeans.labels_, return_counts=True)[1] # type: ignore
         palette : Palette = []
         if size is None:
             size = self.size
         total = pixels.shape[0]
-        for i in range(0, size):
+        for i in range(0, len(counts)):
             center_float : tuple[float, float, float] = kmeans.cluster_centers_[i] # type: ignore
             center : Color = tuple(center_float.astype(int)) # type: ignore
-            count : int = float(counts[i].item()) # type: ignore
+            count = float(counts[i].item())
             color_cluster: PaletteCluster = (
                 center,
                 count / total if self.weighted_palette else 1.0 / size
             )
             palette.append(color_cluster)
+        
+        if len(counts) < size:
+            for _ in range(size - len(counts)):
+                pal : PaletteCluster = ((0, 0, 0), eps if self.weighted_palette else 1.0 / size)
+                palette.append(pal)
         sorted_palette = sorted(palette, key=lambda x: x[1], reverse=True)
         return sorted_palette
 

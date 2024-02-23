@@ -6,6 +6,8 @@ from refiners.training_utils.config import BaseConfig, ModelConfig
 from refiners.training_utils.wandb import WandbConfig
 from refiners.training_utils.huggingface_datasets import HuggingfaceDatasetConfig
 
+from ip_adapter_palette.callback import LogModelParamConfig
+
 class LatentDiffusionConfig(BaseModel):
     unconditional_sampling_probability: float = 0.2
     offset_noise: float = 0.1
@@ -56,3 +58,4 @@ class Config(BaseConfig):
     sd: SDModelConfig
     palette_encoder: PaletteEncoderConfig
     ip_adapter: IPAdapterConfig = IPAdapterConfig()
+    log_model_params: LogModelParamConfig = LogModelParamConfig()
