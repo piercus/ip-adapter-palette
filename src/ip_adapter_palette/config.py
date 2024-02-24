@@ -33,7 +33,7 @@ class PaletteEncoderConfig(ModelConfig):
     weighted_palette: bool = False
     without_caption_probability: float = 0.17
 
-class ColorTrainerEvaluationConfig(BaseModel):
+class GridEvaluationConfig(BaseModel):
     db_indexes: list[int]
     batch_size: int = 1
     color_bits: int = 8
@@ -44,6 +44,12 @@ class ColorTrainerEvaluationConfig(BaseModel):
     #num_images_per_prompt: int = 1
     condition_scale: float = 7.5
 
+class MmdEvaluationConfig(BaseModel):
+    batch_size: int = 1
+    seed: int = 0
+    num_inference_steps: int = 30
+    condition_scale: float = 7.5
+
 class CustomHuggingfaceDatasetConfig(HuggingfaceDatasetConfig):
     caption_key: str = "caption"
 
@@ -52,7 +58,8 @@ class Config(BaseConfig):
     data: Path
     dataset: CustomHuggingfaceDatasetConfig
     eval_dataset: CustomHuggingfaceDatasetConfig
-    evaluation: ColorTrainerEvaluationConfig
+    grid_evaluation: GridEvaluationConfig
+    # mmd_evaluation: MmdEvaluationConfig
     offload_to_cpu: OffloadToCPUConfig = OffloadToCPUConfig()
     sd: SDModelConfig
     palette_encoder: PaletteEncoderConfig

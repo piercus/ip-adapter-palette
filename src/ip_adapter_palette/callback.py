@@ -201,8 +201,17 @@ class TimestepLossRescaler(Callback[Any]):
         return a * inverse_timestep**exponent + b * exp(-c / (inverse_timestep - 1001)) + C
 
     def on_compute_loss_end(self, trainer: "PaletteTrainer") -> None:
-        inverse_timestep = 999 - trainer.timestep
-        loss = trainer.loss
-        loss = loss.mean(dim=list(range(1, len(loss.shape)))) / self.approximate_loss(inverse_timestep)
-        loss = loss.mean()
-        trainer.loss = loss
+        if self.config.use:
+            print(f"TimestepLossRescaler - on_compute_loss_end: {trainer.timestep}")
+            inverse_timestep = 999 - trainer.timestep
+            loss = trainer.loss
+            loss = loss.mean(dim=list(range(1, len(loss.shape)))) / self.approximate_loss(inverse_timestep)
+            loss = loss.mean()
+            trainer.loss = loss
+
+# class MmdEvaluation(Callback[Any]):
+#     def eval_dataset(self, trainer: "PaletteTrainer") -> None:
+#         pass
+#     def on_evaluation_start(self, trainer: "PaletteTrainer") -> None:
+#         trainer.eval_da
+#         trainer.wandb_log(data={"mmd": trainer.mmd.item()})

@@ -32,7 +32,7 @@ from refiners.training_utils import (
     register_callback,
 )
 import os
-from ip_adapter_palette.config import Config, IPAdapterConfig
+from ip_adapter_palette.config import Config, IPAdapterConfig, MmdEvaluationConfig
 from ip_adapter_palette.datasets import ColorDataset, GridEvalDataset
 from refiners.foundationals.latent_diffusion.stable_diffusion_1.unet import SD1UNet
 
@@ -131,6 +131,10 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     def timestep_loss_rescaler(self, config: TimestepLossRescalerConfig) -> TimestepLossRescaler:
         return TimestepLossRescaler(config)
     
+    # @register_callback()
+    # def mmd_evaluation(self, config: MmdEvaluationConfig) -> MmdEvaluation:
+    #     return MmdEvaluation(config)
+
     @cached_property
     def data(self) -> list[BatchInput]:
         return [
@@ -316,11 +320,11 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
 
     @cached_property
     def histogram_distance(self) -> HistogramDistance:
-        return HistogramDistance(color_bits=self.config.evaluation.color_bits)
+        return HistogramDistance(color_bits=self.config.grid_evaluation.color_bits)
     
     @cached_property
     def histogram_extractor(self) -> HistogramExtractor:
-        return HistogramExtractor(color_bits=self.config.evaluation.color_bits)
+        return HistogramExtractor(color_bits=self.config.grid_evaluation.color_bits)
     
     @cached_property
     def grid_eval_dataset(self) -> GridEvalDataset:
@@ -331,8 +335,8 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             palette_extractor=self.palette_extractor,
             histogram_extractor=self.histogram_extractor,
             folder=self.config.data,
-            db_indexes=self.config.evaluation.db_indexes,
-            prompts=self.config.evaluation.prompts
+            db_indexes=self.config.grid_evaluation.db_indexes,
+            prompts=self.config.grid_evaluation.prompts
         )
     @cached_property
     def grid_eval_dataloader(self) -> DataLoader[BatchInput]:
@@ -340,11 +344,11 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         # if num_workers is None:
         #     num_workers = 1
         
-        logger.debug(f"Evaluation batch size is {self.config.evaluation.batch_size}")
+        logger.debug(f"Evaluation batch size is {self.config.grid_evaluation.batch_size}")
         
         return DataLoader(
             dataset=self.grid_eval_dataset, 
-            batch_size=self.config.evaluation.batch_size, 
+            batch_size=self.config.grid_evaluation.batch_size, 
             shuffle=False,
             collate_fn=BatchInput.collate, 
             #num_workers=num_workers
@@ -378,7 +382,7 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
                 x,
                 step=step,
                 clip_text_embedding=clip_text_embedding,
-                condition_scale = self.config.evaluation.condition_scale
+                condition_scale = self.config.grid_evaluation.condition_scale
             )
 
         # images = (self.lda.decode(x) + 1 )/2

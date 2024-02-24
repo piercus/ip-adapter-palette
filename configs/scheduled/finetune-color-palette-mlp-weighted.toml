@@ -3,8 +3,8 @@ data = "./weights/embeddings/"
 mode = "online" # "online", "offline", "disabled"
 entity = "piercus"
 project = "color-palette"
-name = "wpalette-overfit-768"
-tags = ["reload-ckpt", "weighted-palette", "embeddings"]
+name = "wpalette-overfit-768-no-rescaler"
+tags = ["weighted-palette", "embeddings"]
 
 [sd]
 unet = "weights/models/unet.safetensors"
@@ -26,11 +26,11 @@ weighted_palette = false
 [training]
 duration = "10000:epoch"
 seed = 0
-batch_size = 24
+batch_size = 20
 gradient_accumulation = "10:step"
 # clip_grad_norm = 1.0
 # clip_grad_value = 1.0
-evaluation_interval = "30:epoch"
+evaluation_interval = "10:epoch"
 evaluation_seed = 1
 # num_workers = 8
 # use_color_loss = false
@@ -42,7 +42,7 @@ patterns = ["ip_adapter.*"]
 
 [optimizer]
 optimizer = "AdamW" # "SGD", "Adam", "AdamW", "AdamW8bit", "Lion8bit"
-learning_rate = 1e-4
+learning_rate = 1e-5
 betas = [0.9, 0.999]
 eps = 1e-8
 weight_decay = 1e-2
@@ -66,12 +66,12 @@ split = "train[200:220]"
 
 [offload_to_cpu]
 use = true
-[evaluation]
+[grid_evaluation]
 batch_size = 12
 num_inference_steps = 30
 color_bits = 4
 use_short_prompts = false
-db_indexes = [0, 1, 2, 3, 4, 5, 6, 7, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+db_indexes = [0, 1, 2, 3, 4, 5]#, 6, 7, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
 prompts = [
      "A Bustling City Street",
      "A cute cat",
@@ -81,3 +81,8 @@ prompts = [
     # "A group of working people"
 ]
 condition_scale = 1.0
+
+# [mmd_evaluation]
+# batch_size = 12
+# num_inference_steps = 30
+# condition_scale = 7.5
