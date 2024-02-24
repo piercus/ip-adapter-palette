@@ -110,7 +110,6 @@ class SD1TrainerMixin(ABC):
         self,
         size: tuple[int, ...],
         /,
-        offset_noise: float = 0.1,
         generator: torch.Generator | None = None,
     ) -> torch.Tensor:
         """Sample noise from a normal distribution.
@@ -119,7 +118,7 @@ class SD1TrainerMixin(ABC):
         images with a wider range of contrast https://www.crosslabs.org/blog/diffusion-with-offset-noise.
         """
         assert isinstance(self, Trainer), "This mixin can only be used with a Trainer"
-        return sample_noise(size, offset_noise, generator, self.device, self.dtype)
+        return sample_noise(size, self.config.latent_diffusion.offset_noise, generator, self.device, self.dtype)
 
     def sample_timestep(self, batch_size: int, /) -> torch.Tensor:
         """Sample a timestep from a uniform distribution."""

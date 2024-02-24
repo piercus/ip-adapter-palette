@@ -1,5 +1,5 @@
 from ip_adapter_palette.config import Config
-from ip_adapter_palette.trainer import SD1IPPalette
+from ip_adapter_palette.trainer import PaletteTrainer
 import argparse
 
 if __name__ == "__main__":
@@ -11,5 +11,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     config = Config.load_from_toml(args.config)
-    trainer = SD1IPPalette(config)
+    trainer = PaletteTrainer(config)
     trainer.precompute(batch_size=args.batch_size, force=args.force)

@@ -6,11 +6,18 @@ import random
 import numpy as np
 from requests import get
 from ip_adapter_palette.callback import (
-    LogModelParamConfig,
+    MonitorGradient,
+    MonitorGradientConfig,
+    OffloadToCPU,
+    OffloadToCPUConfig,
     SaveBestModel,
     SaveBestModelConfig,
     LogModelParam,
-    LogModelParamConfig
+    LogModelParamConfig,
+    MonitorTime,
+    MonitorTimeConfig,
+    TimestepLossRescaler,
+    TimestepLossRescalerConfig,
 )
 from ip_adapter_palette.latent_diffusion import SD1TrainerMixin
 from refiners.fluxion import load_from_safetensors
@@ -50,7 +57,7 @@ from refiners.fluxion.utils import tensor_to_images, tensor_to_image, images_to_
 from typing import TypedDict, Tuple
 from torch.nn.functional import mse_loss
 
-class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
+class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     def __init__(self, config: Config) -> None:
         super().__init__(config)
 
@@ -75,6 +82,7 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     @register_model()
     def ip_adapter(self, config: IPAdapterConfig) -> SD1PaletteAdapter[SD1UNet]:
         logger.info("Loading IP Adapter.")
+
         if config.weights is not None:
             weights = load_from_safetensors(config.weights)
         else:
@@ -84,7 +92,11 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             self.unet,
             palette_encoder = self.palette_encoder,
             weights=weights
-        ).inject()
+        )
+        if config.weights is None:
+            ip_adapter.zero_init()
+
+        ip_adapter.inject()
         
         for adapter in ip_adapter.sub_adapters:
             adapter.image_key_projection.requires_grad_(True)
@@ -102,7 +114,23 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     @register_callback()
     def log_model_params(self, config: LogModelParamConfig) -> LogModelParam:
         return LogModelParam()
-
+    
+    @register_callback()
+    def monitor_time(self, config: MonitorTimeConfig) -> MonitorTime:
+        return MonitorTime(config)
+    
+    @register_callback()
+    def monitor_gradient(self, config: MonitorGradientConfig) -> MonitorGradient:
+        return MonitorGradient(config)
+    
+    @register_callback()
+    def offload_to_cpu(self, config: OffloadToCPUConfig) -> OffloadToCPU:
+        return OffloadToCPU(config)
+    
+    @register_callback()
+    def timestep_loss_rescaler(self, config: TimestepLossRescalerConfig) -> TimestepLossRescaler:
+        return TimestepLossRescaler(config)
+    
     @cached_property
     def data(self) -> list[BatchInput]:
         return [
@@ -164,6 +192,7 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             raise ValueError(f"Latents should be a tensor, not {type(source_latents)}")
 
         timestep = self.sample_timestep(source_latents.shape[0])
+        self.timestep = timestep
         noise = self.sample_noise(source_latents.shape)
         noisy_latents = self.add_noise_to_latents(source_latents, noise)
         palette_embeddings = self.palette_encoder(source_palettes)
@@ -171,7 +200,7 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         self.unet.set_clip_text_embedding(text_embeddings)
         self.ip_adapter.set_palette_embedding(palette_embeddings)
         prediction = self.unet(noisy_latents)
-        loss = F.mse_loss(input=prediction, target=noise)
+        loss = F.mse_loss(input=prediction, target=noise, reduction='none')
         return loss
     
     @cached_property
@@ -223,28 +252,6 @@ class SD1IPPalette(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         self.wandb_log(data=images)
 
         self.batch_metrics(all_results, prefix="eval")
-    
-    # def compute_image_quality_evaluation(
-    #     self
-    # ) -> None:
-        
-    #     per_prompts : dict[str, BatchOutput] = {}
-    #     images : dict[str, WandbLoggable] = {}
-    #     results: list[BatchOutput] = []
-                
-    #     for batch in self.flat_eval_dataloader:
-    #         logger.debug(f"Computing flat evaluation for {len(batch)} items")
-    #         results.append(self.batch_inference(batch.to(device=self.device, dtype=self.dtype)))
-        
-    #     all_results = BatchOutput.collate(results)
-    #     mmd_value = mmd(all_results.result_latents, all_results.source_latents)
-    #     self.wandb_log(data={
-    #         "mmd": mmd_value
-    #     })
-        
-            
-        
-
     
     def compute_evaluation(
         self

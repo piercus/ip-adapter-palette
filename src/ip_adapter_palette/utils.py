@@ -4,11 +4,6 @@ import attr
 
 from torch import Tensor, cat, device as Device, dtype as DType, empty, stack
 
-Logger = Callable[[Any], None]
-
-CollatableProps = list[Any] | Tensor
-
-
 T = TypeVar('T', bound='Batch')
 
 def simple_hint(hint: Type) -> Type:
@@ -16,7 +11,6 @@ def simple_hint(hint: Type) -> Type:
     if origin is None: # for Tensor
         return hint
     return origin
-
 
 class TypeCheckMeta(type):
     def __new__(cls, name, bases, dct):

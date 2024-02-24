@@ -6,7 +6,7 @@ from refiners.training_utils.config import BaseConfig, ModelConfig
 from refiners.training_utils.wandb import WandbConfig
 from refiners.training_utils.huggingface_datasets import HuggingfaceDatasetConfig
 
-from ip_adapter_palette.callback import LogModelParamConfig
+from ip_adapter_palette.callback import LogModelParamConfig, MonitorTimeConfig, MonitorGradientConfig, OffloadToCPUConfig, TimestepLossRescalerConfig
 
 class LatentDiffusionConfig(BaseModel):
     unconditional_sampling_probability: float = 0.2
@@ -48,14 +48,17 @@ class CustomHuggingfaceDatasetConfig(HuggingfaceDatasetConfig):
     caption_key: str = "caption"
 
 class Config(BaseConfig):
-    wandb: WandbConfig
     latent_diffusion: LatentDiffusionConfig
     data: Path
     dataset: CustomHuggingfaceDatasetConfig
     eval_dataset: CustomHuggingfaceDatasetConfig
     evaluation: ColorTrainerEvaluationConfig
-    offload_to_cpu: bool = False
+    offload_to_cpu: OffloadToCPUConfig = OffloadToCPUConfig()
     sd: SDModelConfig
     palette_encoder: PaletteEncoderConfig
     ip_adapter: IPAdapterConfig = IPAdapterConfig()
     log_model_params: LogModelParamConfig = LogModelParamConfig()
+    monitor_time: MonitorTimeConfig = MonitorTimeConfig()
+    monitor_gradient: MonitorGradientConfig = MonitorGradientConfig()
+    timestep_loss_rescaler: TimestepLossRescalerConfig = TimestepLossRescalerConfig()
+    wandb: WandbConfig

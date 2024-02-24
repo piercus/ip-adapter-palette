@@ -3,6 +3,7 @@ from typing import Any, List, TypeVar, cast
 from jaxtyping import Float
 from torch import Tensor, cat, device as Device, dtype as DType, float32, ones, tensor, zeros
 from torch.nn.functional import pad
+from torch.nn import init
 
 import refiners.fluxion.layers as fl
 from ip_adapter_palette.types import Color, Palette, PaletteCluster
@@ -16,8 +17,6 @@ from refiners.foundationals.latent_diffusion.stable_diffusion_1.unet import SD1U
 from refiners.foundationals.latent_diffusion.stable_diffusion_xl.unet import SDXLUNet
 
 TSDNet = TypeVar("TSDNet", bound="SD1UNet | SDXLUNet")
-
-
 
 class PalettesTokenizer(fl.Module):
     _lda: list[SD1Autoencoder]
@@ -449,7 +448,17 @@ class PaletteCrossAttentionAdapter(fl.Chain, Adapter[fl.Attention]):
 
     @property
     def weights(self) -> list[Tensor]:
-        return list(self.image_key_projection.weight + self.image_value_projection.weight)
+        lst = [
+            self.image_key_projection.weight,
+            self.image_value_projection.weight
+        ]
+        if self.image_key_projection.bias is not None:
+            lst.append(self.image_key_projection.bias)
+        
+        if self.image_value_projection.bias is not None:
+            lst.append(self.image_value_projection.bias)
+        
+        return lst
 
 class SD1PaletteAdapter(fl.Chain, Adapter[TSDNet]):
     # Prevent PyTorch module registration
