@@ -171,7 +171,7 @@ class MonitorGradient(Callback[Any]):
             })
         return result
 
-    def on_backward_end(self, trainer: "PaletteTrainer") -> None:
+    def on_optimizer_step_begin(self, trainer: "PaletteTrainer") -> None:
         layer_learnable_parameters = self.per_layer_learnable_parameters(trainer.models) # type: ignore
 
         for layer_name in layer_learnable_parameters:
@@ -182,7 +182,7 @@ class MonitorGradient(Callback[Any]):
                     trainer.wandb_log(data={f"layer_grad_norm/{layer_name}": norm})
         
         if self.config.total:
-            trainer.wandb_log(data={"total_grad_norm": trainer.total_gradient_norm})
+            trainer.wandb_log(data={"grad_norm": trainer.total_gradient_norm})
 
 import math 
 from torch import Tensor, exp
@@ -202,12 +202,13 @@ class TimestepLossRescaler(Callback[Any]):
 
     def on_compute_loss_end(self, trainer: "PaletteTrainer") -> None:
         if self.config.use:
-            print(f"TimestepLossRescaler - on_compute_loss_end: {trainer.timestep}")
             inverse_timestep = 999 - trainer.timestep
             loss = trainer.loss
             loss = loss.mean(dim=list(range(1, len(loss.shape)))) / self.approximate_loss(inverse_timestep)
             loss = loss.mean()
             trainer.loss = loss
+        else:
+            trainer.loss = trainer.loss.mean()
 
 # class MmdEvaluation(Callback[Any]):
 #     def eval_dataset(self, trainer: "PaletteTrainer") -> None:
