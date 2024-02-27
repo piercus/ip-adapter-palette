@@ -7,7 +7,7 @@ from sklearn.metrics import ndcg_score  # type: ignore
 from sklearn.neighbors import NearestNeighbors  # type: ignore
 
 
-from ip_adapter_palette.types import Color, Palette, BatchOutput, ImageAndPalette
+from ip_adapter_palette.types import Color, Palette, ImageAndPalette
 
 from refiners.fluxion.utils import tensor_to_images
 
@@ -76,30 +76,3 @@ def batch_image_palette_metrics(log: Callable[[Any], None], images_and_palettes:
             log({f"{prefix}/ndcg_{num}": score, f"{prefix}/std_dev_{num}": np.std(per_num[num]["distances"]).item()})
         else:
             log({f"{prefix}/std_dev_{num}": np.std(per_num[num]["distances"]).item()})
-
-
-
-def batch_palette_metrics(log: Callable[[Any], None], images_and_palettes: BatchOutput, prefix: str = "palette-img"):
-    
-    source_palettes = cast(list[Palette], images_and_palettes.source_palettes) # type: ignore
-    palettes: list[list[Color]] = []
-    for p in source_palettes: # type: ignore
-        colors : list[Color] = []
-        sorted_clusters = sorted(p, key=lambda x: x[1], reverse=True)
-        for sorted_clusters in p:
-            colors.append(sorted_clusters[0])
-        palettes.append(colors)
-    
-    images = tensor_to_images(images_and_palettes.result_images) # type: ignore
-    
-    if len(images) != len(palettes):
-        raise ValueError("Images and palettes must have the same length")
-        
-    return batch_image_palette_metrics(
-        log,
-        [
-            ImageAndPalette({"image": image, "palette": palette})
-            for image, palette in zip(images, palettes)
-        ],
-        prefix
-    )

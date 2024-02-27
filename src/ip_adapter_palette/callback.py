@@ -26,7 +26,7 @@ class OffloadToCPU(Callback[Any]):
     def __init__(self, config: OffloadToCPUConfig) -> None:
         self.config = config
         super().__init__()
-    def on_evaluation_start(self, trainer: "PaletteTrainer") -> None:
+    def on_evaluate_begin(self, trainer: "PaletteTrainer") -> None:
         if self.config.use:
             trainer.sd.lda.to(trainer.device)
             trainer.text_encoder.to(trainer.device)
@@ -213,6 +213,6 @@ class TimestepLossRescaler(Callback[Any]):
 # class MmdEvaluation(Callback[Any]):
 #     def eval_dataset(self, trainer: "PaletteTrainer") -> None:
 #         pass
-#     def on_evaluation_start(self, trainer: "PaletteTrainer") -> None:
+#     def on_evaluate_begin(self, trainer: "PaletteTrainer") -> None:
 #         trainer.eval_da
 #         trainer.wandb_log(data={"mmd": trainer.mmd.item()})

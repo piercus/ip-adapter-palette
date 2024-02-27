@@ -1,12 +1,16 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
 
 from refiners.training_utils.config import BaseConfig, ModelConfig
 from refiners.training_utils.wandb import WandbConfig
 from refiners.training_utils.huggingface_datasets import HuggingfaceDatasetConfig
-
+from ip_adapter_palette import histogram_auto_encoder
 from ip_adapter_palette.callback import LogModelParamConfig, MonitorTimeConfig, MonitorGradientConfig, OffloadToCPUConfig, TimestepLossRescalerConfig
+from ip_adapter_palette.evaluation.grid_evaluation import GridEvaluationConfig
+from ip_adapter_palette.evaluation.mmd_evaluation import MmdEvaluationConfig
+from ip_adapter_palette.evaluation.visual_evaluation import VisualEvaluationConfig
 
 class LatentDiffusionConfig(BaseModel):
     unconditional_sampling_probability: float = 0.2
@@ -33,33 +37,26 @@ class PaletteEncoderConfig(ModelConfig):
     weighted_palette: bool = False
     without_caption_probability: float = 0.17
 
-class GridEvaluationConfig(BaseModel):
-    db_indexes: list[int]
-    batch_size: int = 1
-    color_bits: int = 8
-    seed: int = 0
-    num_inference_steps: int = 30
-    use_short_prompts: bool = False
-    prompts: list[str] = []
-    #num_images_per_prompt: int = 1
-    condition_scale: float = 7.5
-
-class MmdEvaluationConfig(BaseModel):
-    batch_size: int = 1
-    seed: int = 0
-    num_inference_steps: int = 30
-    condition_scale: float = 7.5
-
 class CustomHuggingfaceDatasetConfig(HuggingfaceDatasetConfig):
     caption_key: str = "caption"
+
+class HistogramAutoEncoderConfig(ModelConfig):
+    latent_dim : int = 64
+    resnet_sizes: list[int] = [8, 8, 8, 8, 16, 16, 32]
+    n_down_samples: int = 6
+    color_bits: int = 6
+    num_groups: int = 4
+    loss: str = "kl_div"
+
 
 class Config(BaseConfig):
     latent_diffusion: LatentDiffusionConfig
     data: Path
+    mode: Literal["text_embedding", "palette", "histogram"]
     dataset: CustomHuggingfaceDatasetConfig
     eval_dataset: CustomHuggingfaceDatasetConfig
     grid_evaluation: GridEvaluationConfig
-    # mmd_evaluation: MmdEvaluationConfig
+    mmd_evaluation: MmdEvaluationConfig
     offload_to_cpu: OffloadToCPUConfig = OffloadToCPUConfig()
     sd: SDModelConfig
     palette_encoder: PaletteEncoderConfig
@@ -69,3 +66,5 @@ class Config(BaseConfig):
     monitor_gradient: MonitorGradientConfig = MonitorGradientConfig()
     timestep_loss_rescaler: TimestepLossRescalerConfig = TimestepLossRescalerConfig()
     wandb: WandbConfig
+    histogram_auto_encoder: HistogramAutoEncoderConfig = HistogramAutoEncoderConfig()
+    visual_evaluation: VisualEvaluationConfig = VisualEvaluationConfig()

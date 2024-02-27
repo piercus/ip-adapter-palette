@@ -118,7 +118,7 @@ class EmbeddableDataset(Dataset[BatchInput]):
         hf_dataset_config: HuggingfaceDatasetConfig,
         lda: LatentDiffusionAutoencoder,
         text_encoder: CLIPTextEncoderL,
-        palette_extractor: PaletteExtractor,
+        palette_extractor_weighted: PaletteExtractor,
         histogram_extractor: HistogramExtractor,
         folder: Path
     ):
@@ -127,7 +127,7 @@ class EmbeddableDataset(Dataset[BatchInput]):
         self.lda = lda
         self.text_encoder = text_encoder
         self.folder = folder
-        self.palette_extractor = palette_extractor
+        self.palette_extractor_weighted = palette_extractor_weighted
         self.histogram_extractor = histogram_extractor
         self.process_image = self.build_image_processor(hf_dataset_config)
     
@@ -167,7 +167,7 @@ class EmbeddableDataset(Dataset[BatchInput]):
         processed_images = [self.process_image(image) for image in images]
         source_prompts = [hf_item['caption'] for hf_item in hf_items]
         return BatchInput(
-            source_palettes= [palette_extractor(processed_image) for processed_image in processed_images],
+            source_palettes_weighted = [palette_extractor(processed_image) for processed_image in processed_images],
             source_prompts = source_prompts,
             db_indexes = [hf_item['db_index'] for hf_item in hf_items],
             photo_ids = [hf_item['photo_id'] for hf_item in hf_items],
@@ -201,7 +201,7 @@ class EmbeddableDataset(Dataset[BatchInput]):
                 filtered,
                 self.lda, 
                 self.text_encoder, 
-                self.palette_extractor,
+                self.palette_extractor_weighted,
                 self.histogram_extractor,
                 force, 
                 self.hf_dataset_config
@@ -213,13 +213,13 @@ class GridEvalDataset(EmbeddableDataset):
         hf_dataset_config: HuggingfaceDatasetConfig,
         lda: LatentDiffusionAutoencoder,
         text_encoder: CLIPTextEncoderL,
-        palette_extractor: PaletteExtractor,
+        palette_extractor_weighted: PaletteExtractor,
         histogram_extractor: HistogramExtractor,
         db_indexes: list[int],
         prompts: list[str],
         folder: Path
     ):
-        super().__init__(hf_dataset_config, lda, text_encoder, palette_extractor, histogram_extractor, folder)
+        super().__init__(hf_dataset_config, lda, text_encoder, palette_extractor_weighted, histogram_extractor, folder)
         self.db_indexes = db_indexes
         self.prompts = prompts
     
@@ -242,6 +242,7 @@ class GridEvalDataset(EmbeddableDataset):
         item.source_text_embeddings = self.prompts_embeddings[prompt_index:prompt_index+1]
         return item
 
+
 class ColorDataset(EmbeddableDataset):
     def __len__(self):
         return len(self.hf_dataset)
@@ -249,4 +250,24 @@ class ColorDataset(EmbeddableDataset):
     def __getitem__(self, index: int) -> BatchInput:
         hf_item = self.hf_dataset[index]
         return load_batch_from_hf(self.folder, hf_item)
-        
+
+class ColorIndexesDataset(EmbeddableDataset):
+    def __init__(self,
+        hf_dataset_config: HuggingfaceDatasetConfig,
+        lda: LatentDiffusionAutoencoder,
+        text_encoder: CLIPTextEncoderL,
+        palette_extractor_weighted: PaletteExtractor,
+        histogram_extractor: HistogramExtractor,
+        folder: Path,
+        db_indexes: list[int]
+    ):
+        super().__init__(hf_dataset_config, lda, text_encoder, palette_extractor_weighted, histogram_extractor, folder)
+        self.db_indexes = db_indexes
+    
+    def __len__(self):
+        return len(self.db_indexes)
+    
+    def __getitem__(self, index: int) -> BatchInput:
+        db_index = self.db_indexes[index]
+        hf_item = self.hf_dataset[db_index]
+        return load_batch_from_hf(self.folder, hf_item)

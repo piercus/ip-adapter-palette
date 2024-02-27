@@ -40,13 +40,12 @@ class Batch(metaclass=TypeCheckMeta):
             type_hint = type_hints[key]
 
             if key not in kwargs:
-                raise ValueError(f"Missing required attribute: {key} in {kwargs}")
+                raise ValueError(f"Missing required attribute: {key}")
 
             value = kwargs[key]
             
-            
             if not isinstance(value, simple_hint(type_hint)):
-                raise ValueError(f"Invalid type for attribute {key}: Expected {origin}, got {type(value)}")
+                raise ValueError(f"Invalid type for attribute {key}: Expected {type_hint}, got {type(value)}")
             
             if isinstance(value, list):
                 new_size = len(value)

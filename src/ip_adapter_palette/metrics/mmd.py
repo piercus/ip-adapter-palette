@@ -15,6 +15,8 @@ def mmd(x: Tensor, y: Tensor, sigma: int = 10, scale: int = 1) -> Tensor:
       The MMD distance between x and y embedding sets.
     """
 
+    print(x.shape, y.shape)
+
     x_sqnorms = diag(matmul(x, x.T))
     y_sqnorms = diag(matmul(y, y.T))
 
