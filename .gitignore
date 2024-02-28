@@ -164,3 +164,5 @@ scripts/convert_transformers_clip_text_model.py
 scripts/convert_diffusers_autoencoder_kl.py
 scripts/convert_diffusers_unet.py
 wandb
+tmp 
+nohup.out

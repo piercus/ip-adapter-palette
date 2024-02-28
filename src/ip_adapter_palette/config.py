@@ -8,6 +8,7 @@ from refiners.training_utils.wandb import WandbConfig
 from refiners.training_utils.huggingface_datasets import HuggingfaceDatasetConfig
 from ip_adapter_palette import histogram_auto_encoder
 from ip_adapter_palette.callback import LogModelParamConfig, MonitorTimeConfig, MonitorGradientConfig, OffloadToCPUConfig, TimestepLossRescalerConfig
+from ip_adapter_palette.evaluation.fid_evaluation import FidEvaluationConfig
 from ip_adapter_palette.evaluation.grid_evaluation import GridEvaluationConfig
 from ip_adapter_palette.evaluation.mmd_evaluation import MmdEvaluationConfig
 from ip_adapter_palette.evaluation.visual_evaluation import VisualEvaluationConfig
@@ -49,6 +50,7 @@ class HistogramAutoEncoderConfig(ModelConfig):
     loss: str = "kl_div"
 
 
+
 class Config(BaseConfig):
     latent_diffusion: LatentDiffusionConfig
     data: Path
@@ -68,3 +70,4 @@ class Config(BaseConfig):
     wandb: WandbConfig
     histogram_auto_encoder: HistogramAutoEncoderConfig = HistogramAutoEncoderConfig()
     visual_evaluation: VisualEvaluationConfig = VisualEvaluationConfig()
+    fid_evaluation: FidEvaluationConfig = FidEvaluationConfig()

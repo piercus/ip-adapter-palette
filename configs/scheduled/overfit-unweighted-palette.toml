@@ -1,10 +1,10 @@
 data = "./weights/embeddings/"
-mode = "text_embedding"
+mode = "palette"
 [wandb]
-mode = "disabled" # "online", "offline", "disabled"
+mode = "online" # "online", "offline", "disabled"
 entity = "piercus"
 project = "color-palette"
-name = "wpalette-txt-emb-expe"
+name = "wpalette-overfit-1k"
 tags = ["weighted-palette", "embeddings"]
 
 [sd]
@@ -19,17 +19,17 @@ offset_noise = 0.1
 
 [palette_encoder]
 max_colors = 8
-feedforward_dim = 128
-num_layers = 0
+feedforward_dim = 20
+num_layers = 2
 mode = 'mlp'
-embedding_dim = 768
+embedding_dim = 10
 weighted_palette = false
 
 [training]
 duration = "10000:epoch"
 seed = 0
 batch_size = 20
-gradient_accumulation = "10:step"
+gradient_accumulation = "3:step"
 # clip_grad_norm = 1.0
 # clip_grad_value = 1.0
 evaluation_interval = "10:epoch"

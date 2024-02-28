@@ -20,6 +20,7 @@ from ip_adapter_palette.callback import (
     TimestepLossRescaler,
     TimestepLossRescalerConfig,
 )
+from ip_adapter_palette.evaluation.fid_evaluation import FidEvaluationCallback, FidEvaluationConfig
 from ip_adapter_palette.evaluation.grid_evaluation import GridEvaluationCallback, GridEvaluationConfig
 from ip_adapter_palette.evaluation.mmd_evaluation import MmdEvaluationCallback
 from ip_adapter_palette.evaluation.visual_evaluation import VisualEvaluationCallback, VisualEvaluationConfig
@@ -166,6 +167,10 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     def visual_evaluation(self, config: VisualEvaluationConfig) -> VisualEvaluationCallback:
         return VisualEvaluationCallback(config)
     
+    @register_callback()
+    def fid_evaluation(self, config: FidEvaluationConfig) -> FidEvaluationCallback:
+        return FidEvaluationCallback(config)
+    
     @cached_property
     def data(self) -> list[BatchInput]:
         return [
@@ -215,7 +220,7 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         return len(self.hf_train_dataset) # type: ignore
     
     def process_palettes(self, palettes: list[Palette]) -> list[Palette]:
-        if self.config.palette_encoder.weighted_palette:
+        if not self.config.palette_encoder.weighted_palette:
             return [
                 [(palette_cluster[0], 1.0/len(palette))  for palette_cluster in palette]
                 for palette in palettes 
@@ -223,7 +228,7 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         return palettes
     
     def compute_loss(self, batch: BatchInput) -> torch.Tensor:
-        source_latents, text_embeddings, source_palettes, source_histograms = (
+        source_latents, text_embeddings, source_palettes, source_histograms, source_sampling = (
             batch.source_latents,
             batch.source_text_embeddings,
             batch.source_palettes_weighted,
@@ -255,7 +260,10 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
                 histogram_embeddings = self.histogram_auto_encoder.encode_sequence(source_histograms)
                 self.ip_adapter.set_palette_embedding(histogram_embeddings)
                 self.unet.set_clip_text_embedding(text_embeddings)
-        
+            case "sampling":
+                embedding = self.sampling_encoder(source_sampling)
+                self.ip_adapter.set_palette_embedding(histogram_embeddings)
+                self.unet.set_clip_text_embedding(text_embeddings)
         prediction = self.unet(noisy_latents)
         loss = F.mse_loss(input=prediction, target=noise, reduction='none')
         return loss
@@ -275,8 +283,7 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         self._call_callbacks(event_name="on_precompute_start")
         self.hf_train_dataset.precompute_embeddings(force=force, batch_size=batch_size)
         self._call_callbacks(event_name="on_precompute_end")
-
-
+    
     def compute_evaluation(
         self
     ) -> None:

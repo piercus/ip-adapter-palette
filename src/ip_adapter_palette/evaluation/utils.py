@@ -105,7 +105,7 @@ def draw_palette_cover_image(batch: BatchOutput, trainer: 'PaletteTrainer') -> I
         join_canvas_image.paste(source_images[i], box=(0, i*(height+palette_img_size)))
         join_canvas_image.paste(image, box=(width, i*(height+palette_img_size)))
         palette_out = result_palettes_processed[i]
-        palette_int = result_palettes_processed[i]
+        palette_int = sources_palettes_processed[i]
         palette_out_img = draw_palette(palette_out, width, palette_img_size)
         palette_in_img = draw_palette(palette_int, width, palette_img_size)
         

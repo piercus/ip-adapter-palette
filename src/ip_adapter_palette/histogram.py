@@ -140,7 +140,7 @@ class HistogramDistance(fl.Chain):
         color_bits: int = 8,
     ) -> None:
         self.color_bits = color_bits
-        super().__init__(fl.Lambda(func=self.kl_div))
+        super().__init__(fl.Lambda(func=self.mse))
 
     def mse(self, x: Tensor, y: Tensor) -> Tensor:
         return _mse_loss(x, y)
@@ -168,7 +168,7 @@ class HistogramDistance(fl.Chain):
         return (2*((x - y)**2)/(x + y + eps)).sum()/x.shape[0]
 
     def intersection(self, x: Tensor, y: Tensor) -> Tensor:
-        return min(stack([x,y]), dim=0)[0].sum()/x.shape[0]
+        return min(stack([x,y]), dim=0)[0].sum()
     
     def hellinger(self, x: Tensor, y: Tensor) -> Tensor:
         x = x.reshape(x.shape[0], -1)
