@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from refiners.training_utils.config import BaseConfig, ModelConfig
 from refiners.training_utils.wandb import WandbConfig
 from refiners.training_utils.huggingface_datasets import HuggingfaceDatasetConfig
+from torch import embedding
 from ip_adapter_palette import histogram_auto_encoder
 from ip_adapter_palette.callback import LogModelParamConfig, MonitorTimeConfig, MonitorGradientConfig, OffloadToCPUConfig, TimestepLossRescalerConfig
 from ip_adapter_palette.evaluation.fid_evaluation import FidEvaluationConfig
@@ -16,6 +17,8 @@ from ip_adapter_palette.evaluation.visual_evaluation import VisualEvaluationConf
 class LatentDiffusionConfig(BaseModel):
     unconditional_sampling_probability: float = 0.2
     offset_noise: float = 0.1
+    num_inference_steps: int = 1000
+    cubic: bool = False
 
 class SDModelConfig(ModelConfig):
     unet: Path
@@ -24,19 +27,22 @@ class SDModelConfig(ModelConfig):
 
 class IPAdapterConfig(ModelConfig):
     weights: Path | None = None
+    embedding_dim: int = 768
 
 class PaletteEncoderConfig(ModelConfig):
     weights: Path | None = None
     feedforward_dim: int = 3072
-    num_attention_heads: int = 12
+    num_attention_heads: int = 2 # 12, reduced for embedding_dim=768
     num_layers: int = 12
-    embedding_dim: int = 768
     trigger_phrase: str = ""
     use_only_trigger_probability: float = 0.0
-    max_colors: int
+    max_colors: int = 8
     mode : str = "transformer"
     weighted_palette: bool = False
     without_caption_probability: float = 0.17
+
+class SpatialEncoderConfig(PaletteEncoderConfig):
+    pass
 
 class CustomHuggingfaceDatasetConfig(HuggingfaceDatasetConfig):
     caption_key: str = "caption"
@@ -61,7 +67,8 @@ class Config(BaseConfig):
     mmd_evaluation: MmdEvaluationConfig
     offload_to_cpu: OffloadToCPUConfig = OffloadToCPUConfig()
     sd: SDModelConfig
-    palette_encoder: PaletteEncoderConfig
+    palette_encoder: PaletteEncoderConfig = PaletteEncoderConfig()
+    spatial_palette_encoder: SpatialEncoderConfig = SpatialEncoderConfig()
     ip_adapter: IPAdapterConfig = IPAdapterConfig()
     log_model_params: LogModelParamConfig = LogModelParamConfig()
     monitor_time: MonitorTimeConfig = MonitorTimeConfig()

@@ -470,12 +470,10 @@ class PaletteCrossAttentionAdapter(fl.Chain, Adapter[fl.Attention]):
 
 class SD1PaletteAdapter(fl.Chain, Adapter[TSDNet]):
     # Prevent PyTorch module registration
-    _palette_encoder: list[PaletteEncoder]
-
     def __init__(
         self,
         target: TSDNet,
-        palette_encoder: PaletteEncoder,
+        embedding_dim: int,
         scale: float = 1.0,
         device: Device | str | None = None,
         dtype: DType | None = None,
@@ -484,11 +482,9 @@ class SD1PaletteAdapter(fl.Chain, Adapter[TSDNet]):
         with self.setup_adapter(target):
             super().__init__(target)
 
-        self._palette_encoder = [palette_encoder]
-
         self.sub_adapters: list[PaletteCrossAttentionAdapter] = [
             PaletteCrossAttentionAdapter(
-                target=cross_attn, scale=scale, embedding_dim=palette_encoder.embedding_dim
+                target=cross_attn, scale=scale, embedding_dim=embedding_dim
             )
             for cross_attn in filter(lambda attn: type(attn) != fl.SelfAttention, target.layers(fl.Attention))
         ]
@@ -547,7 +543,3 @@ class SD1PaletteAdapter(fl.Chain, Adapter[TSDNet]):
 
     def set_palette_embedding(self, palette_embedding: Tensor) -> None:
         self.set_context("ip_adapter", {"palette_embedding": palette_embedding})
-
-    @property
-    def palette_encoder(self) -> PaletteEncoder:
-        return self._palette_encoder[0]

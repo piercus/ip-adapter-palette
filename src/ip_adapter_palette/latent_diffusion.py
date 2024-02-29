@@ -102,7 +102,7 @@ class SD1TrainerMixin(ABC):
     def ddpm_scheduler(self) -> DDPM:
         assert isinstance(self, Trainer), "This mixin can only be used with a Trainer"
         return DDPM(
-            num_inference_steps=1000,
+            num_inference_steps=self.config.latent_diffusion.num_inference_steps,
             device=self.device,
         )
 
@@ -123,7 +123,15 @@ class SD1TrainerMixin(ABC):
     def sample_timestep(self, batch_size: int, /) -> torch.Tensor:
         """Sample a timestep from a uniform distribution."""
         assert isinstance(self, Trainer), "This mixin can only be used with a Trainer"
-        random_steps = torch.randint(0, 1000, (batch_size,))
+        num_inference_steps = self.config.latent_diffusion.num_inference_steps
+        if self.config.latent_diffusion.cubic:
+            # Inspired from T2I-Adapter
+            # from https://github.com/TencentARC/T2I-Adapter/blob/c408b059c36e3f9ce336b66746bd606edaa5483a/train_sketch.py#L674
+            random_steps = torch.rand((batch_size,))
+            random_steps = (random_steps**3 * (num_inference_steps-1)).to(torch.long)
+        else:
+            random_steps = torch.randint(0, num_inference_steps, (batch_size,))
+            
         self.random_steps = random_steps
         return self.ddpm_scheduler.timesteps[random_steps]
     

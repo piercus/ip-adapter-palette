@@ -80,9 +80,13 @@ class VisualEvaluationCallback(Callback[Any]):
         )
     
     def on_precompute_start(self, trainer: "PaletteTrainer") -> None:
+        if not self.use:
+            return        
         self.dataset.precompute_embeddings()
     
     def on_evaluate_begin(self, trainer: "PaletteTrainer") -> None:
+        if not self.use:
+            return        
         self.compute_visual_evaluation(trainer)
     
     def compute_visual_evaluation(

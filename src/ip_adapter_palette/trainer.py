@@ -52,7 +52,7 @@ from torch import Tensor, tensor, randn, cat
 from ip_adapter_palette.pixel_sampling import Sampler, Encoder
 from ip_adapter_palette.spatial_palette import SpatialPaletteEncoder, SpatialTokenizer
 from ip_adapter_palette.types import BatchInput
-from ip_adapter_palette.config import PaletteEncoderConfig
+from ip_adapter_palette.config import PaletteEncoderConfig, SpatialEncoderConfig
 from refiners.training_utils.huggingface_datasets import load_hf_dataset, HuggingfaceDatasetConfig
 
 from torch.utils.data import DataLoader, Dataset
@@ -89,6 +89,20 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         return histogram_auto_encoder
     
     @register_model()
+    def spatial_palette_encoder(self, config: SpatialEncoderConfig) -> SpatialPaletteEncoder:
+        return SpatialPaletteEncoder(
+            embedding_dim=self.config.ip_adapter.embedding_dim,
+            num_layers=config.num_layers,
+            num_attention_heads=config.num_attention_heads,
+            feedforward_dim=config.feedforward_dim,
+            mode=config.mode,
+            tokenizer=self.spatial_tokenizer,
+            device=self.device,
+            dtype=self.dtype
+        )
+
+    
+    @register_model()
     def palette_encoder(self, config: PaletteEncoderConfig) -> PaletteEncoder:
         logger.info("Loading Palette Encoder.")
         
@@ -98,7 +112,7 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             feedforward_dim=config.feedforward_dim,
             num_attention_heads=config.num_attention_heads,
             num_layers=config.num_layers,
-            embedding_dim=config.embedding_dim,
+            embedding_dim=self.config.ip_adapter.embedding_dim,
             max_colors=config.max_colors,
             mode=config.mode,
             weighted_palette=config.weighted_palette
@@ -117,7 +131,7 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         
         ip_adapter = SD1PaletteAdapter(
             self.unet,
-            palette_encoder = self.palette_encoder,
+            embedding_dim= config.embedding_dim,
             weights=weights
         )
         if config.weights is None:
@@ -258,18 +272,6 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             input_size=512
         )
     
-    @cached_property
-    def spatial_palette_encoder(self) -> SpatialPaletteEncoder:
-        return SpatialPaletteEncoder(
-            embedding_dim=self.config.palette_encoder.embedding_dim,
-            num_layers=self.config.palette_encoder.num_layers,
-            num_attention_heads=2,
-            feedforward_dim=self.config.palette_encoder.feedforward_dim,
-            mode='transformer',
-            tokenizer=self.spatial_tokenizer,
-            device=self.device,
-            dtype=self.dtype
-        )
 
     def compute_loss(self, batch: BatchInput) -> torch.Tensor:
         source_latents, text_embeddings, source_palettes, source_histograms, source_pixel_sampling, source_spatial_tokens = (

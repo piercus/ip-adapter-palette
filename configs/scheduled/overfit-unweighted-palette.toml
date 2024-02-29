@@ -4,7 +4,7 @@ mode = "palette"
 mode = "online" # "online", "offline", "disabled"
 entity = "piercus"
 project = "color-palette"
-name = "wpalette-overfit-1k"
+name = "wpalette-overfit-1k-cubic"
 tags = ["unweighted-palette", "embeddings"]
 
 [sd]
@@ -15,6 +15,7 @@ lda = "weights/models/lda.safetensors"
 [latent_diffusion]
 unconditional_text_sampling_probability = 1.0
 offset_noise = 0.1
+cubic = true
 
 [palette_encoder]
 max_colors = 8
@@ -31,7 +32,7 @@ batch_size = 20
 gradient_accumulation = "3:step"
 # clip_grad_norm = 1.0
 # clip_grad_value = 1.0
-evaluation_interval = "2:epoch"
+evaluation_interval = "10:epoch"
 evaluation_seed = 1
 # num_workers = 8
 # use_color_loss = false
