@@ -40,14 +40,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ip_adapter_palette.trainer import PaletteTrainer
 
-class BatchSimpleOutput(BatchInput):   
-    result_latents: Tensor
-
 class VisualEvaluationConfig(CallbackConfig):
     condition_scale: float = 7.5
     batch_size: int = 1
     db_indexes: list[int] = []
     use: bool = False
+    use_unconditional_text_embedding: bool = False
 
 class VisualEvaluationCallback(Callback[Any]):
     def __init__(self, config: VisualEvaluationConfig) -> None:
@@ -67,7 +65,9 @@ class VisualEvaluationCallback(Callback[Any]):
             palette_extractor_weighted=trainer.palette_extractor_weighted,
             histogram_extractor=trainer.histogram_extractor,
             folder=trainer.config.data,
-            db_indexes=self.db_indexes
+            db_indexes=self.db_indexes,
+            pixel_sampler=trainer.pixel_sampler,
+            spatial_tokenizer=trainer.spatial_tokenizer,
         )
 
         logger.info(f"Visual Evaluation activated with {len(self.db_indexes)} samples")
@@ -92,7 +92,11 @@ class VisualEvaluationCallback(Callback[Any]):
         results_list : list[BatchOutput] = []
 
         for batch in self.dataloader:
-            result_latents = trainer.batch_inference(batch.to(device=trainer.device, dtype=trainer.dtype))
+            result_latents = trainer.batch_inference(
+                batch.to(device=trainer.device, dtype=trainer.dtype),
+                condition_scale=self.config.condition_scale,
+                use_unconditional_text_embedding=self.config.use_unconditional_text_embedding
+            )
             results_list.append(build_results(batch, result_latents, trainer, self.dataset))
 
         all_results = BatchOutput.collate(results_list)

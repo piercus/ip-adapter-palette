@@ -54,7 +54,7 @@ class HistogramAutoEncoderConfig(ModelConfig):
 class Config(BaseConfig):
     latent_diffusion: LatentDiffusionConfig
     data: Path
-    mode: Literal["text_embedding", "palette", "histogram"]
+    mode: Literal["text_embedding", "palette", "histogram", "pixel_sampling", "spatial_palette"]
     dataset: CustomHuggingfaceDatasetConfig
     eval_dataset: CustomHuggingfaceDatasetConfig
     grid_evaluation: GridEvaluationConfig

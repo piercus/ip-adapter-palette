@@ -1,10 +1,10 @@
 data = "./weights/embeddings/"
-mode = "palette"
+mode = "pixel_sampling"
 [wandb]
 mode = "online" # "online", "offline", "disabled"
 entity = "piercus"
 project = "color-palette"
-name = "wpalette-overfit-1k"
+name = "pix-sampling-overfit-2-layer-1k"
 tags = ["weighted-palette", "embeddings"]
 
 [sd]
@@ -14,7 +14,6 @@ lda = "weights/models/lda.safetensors"
 
 [latent_diffusion]
 unconditional_text_sampling_probability = 1.0
-unconditional_input_sampling_probability = 0.0
 offset_noise = 0.1
 
 [palette_encoder]
@@ -26,13 +25,13 @@ embedding_dim = 10
 weighted_palette = false
 
 [training]
-duration = "10000:epoch"
+duration = "100:epoch"
 seed = 0
 batch_size = 20
 gradient_accumulation = "3:step"
 # clip_grad_norm = 1.0
 # clip_grad_value = 1.0
-evaluation_interval = "10:epoch"
+evaluation_interval = "2:epoch"
 evaluation_seed = 1
 # num_workers = 8
 # use_color_loss = false
@@ -69,19 +68,34 @@ split = "train[200:250]"
 [offload_to_cpu]
 use = true
 
-[grid_evaluation]
-use = false
-
 [visual_evaluation]
 batch_size = 12
-condition_scale = 1.0
+condition_scale = 7.5
 db_indexes=[0, 1, 2, 3, 4, 5]
 use = true
+use_unconditional_text_embedding = true
+
+[grid_evaluation]
+# batch_size = 12
+# color_bits = 4
+# db_indexes = [0, 1, 2]#, 6, 7, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+# prompts = [
+#      "A Bustling City Street",
+#      "A cute cat",
+#      #"An oil painting",
+#      #"A photography of a beautiful woman",
+#     # "A pair of shoes",
+#     # "A group of working people"
+# ]
+# condition_scale = 7.5
+# use_unconditional_text_embedding = false
+use = false
 
 [mmd_evaluation]
 batch_size = 12
-condition_scale = 1.0
+condition_scale = 7.5
 use = true
+use_unconditional_text_embedding = true
 
 [timestep_loss_rescaler]
 use = true

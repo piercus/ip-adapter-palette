@@ -47,6 +47,7 @@ class BatchCLIPOutput(BatchInput):
 class MmdEvaluationConfig(CallbackConfig):
     condition_scale: float = 7.5
     batch_size: int = 1
+    use_unconditional_text_embedding: bool = False
     use: bool = False
 
 class MmdEvaluationCallback(Callback[Any]):
@@ -109,6 +110,8 @@ class MmdEvaluationCallback(Callback[Any]):
             palette_extractor_weighted=trainer.palette_extractor_weighted,
             histogram_extractor=trainer.histogram_extractor,
             folder=trainer.config.data,
+            pixel_sampler=trainer.pixel_sampler,
+            spatial_tokenizer=trainer.spatial_tokenizer,
         )
 
         logger.info(f"MMD Evaluation activated with {len(self.dataset)} samples.")
@@ -124,6 +127,8 @@ class MmdEvaluationCallback(Callback[Any]):
         self.dataset.precompute_embeddings()
     
     def on_evaluate_begin(self, trainer: "PaletteTrainer") -> None:
+        if not self.use:
+            return        
         logger.info("Starting MMD evaluation")
         self.compute_mmd_evaluation(trainer)
 
@@ -136,11 +141,12 @@ class MmdEvaluationCallback(Callback[Any]):
             source_palettes_weighted=batch.source_palettes_weighted,
             source_text_embeddings= batch.source_text_embeddings,
             source_latents=batch.source_latents,
-            result_latents=result_latents,
             db_indexes=batch.db_indexes,
             photo_ids=batch.photo_ids,
             source_clip=self.encode_images(source_images),
-            result_clip=self.encode_images(self.lda.latents_to_images(result_latents))
+            result_clip=self.encode_images(self.lda.latents_to_images(result_latents)),
+            source_pixel_sampling=batch.source_pixel_sampling,
+            source_spatial_tokens=batch.source_spatial_tokens
         )
     
     def compute_mmd_evaluation(
@@ -150,7 +156,11 @@ class MmdEvaluationCallback(Callback[Any]):
         results_list : list[BatchCLIPOutput] = []
 
         for batch in self.dataloader:
-            result_latents = trainer.batch_inference(batch.to(device=trainer.device, dtype=trainer.dtype))
+            result_latents = trainer.batch_inference(
+                batch.to(device=trainer.device, dtype=trainer.dtype),
+                condition_scale=self.config.condition_scale,
+                use_unconditional_text_embedding=self.config.use_unconditional_text_embedding
+            )
             results_list.append(self.build_results(batch, result_latents))
         
         all_results = BatchCLIPOutput.collate(results_list)

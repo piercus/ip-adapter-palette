@@ -72,6 +72,8 @@ def build_results(batch: BatchInput, result_latents: Tensor, trainer: 'PaletteTr
         result_latents = result_latents,
         result_images=result_images,         
         result_palettes_weighted=[trainer.palette_extractor_weighted(image, size=len(batch.source_palettes_weighted[i])) for i, image in enumerate(result_images)],
+        source_pixel_sampling=batch.source_pixel_sampling,
+        source_spatial_tokens=batch.source_spatial_tokens
     )
 
 def draw_palette(palette: Palette, width: int, height: int) -> Image.Image:

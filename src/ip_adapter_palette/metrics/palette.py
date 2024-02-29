@@ -78,7 +78,7 @@ def batch_image_palette_metrics(log: Logger, images_and_palettes: list[ImageAndP
 
     for num in per_num:
         if num > 1:
-            score: float = ndcg_score(per_num[num]["y_true_ranking"], per_num[num]["counts"]).item()
+            score: float = ndcg_score(per_num[num]["y_true_ranking"], per_num[num]["counts"]).item() # type: ignore
             log({f"{prefix}/ndcg_{num}": score, f"{prefix}/std_dev_{num}": np.std(per_num[num]["distances"]).item()})
         else:
             log({f"{prefix}/std_dev_{num}": np.std(per_num[num]["distances"]).item()})

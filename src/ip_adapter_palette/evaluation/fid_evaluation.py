@@ -44,6 +44,7 @@ from torcheval.metrics import FrechetInceptionDistance
 
 class FidEvaluationConfig(CallbackConfig):
     condition_scale: float = 7.5
+    use_unconditional_text_embedding: bool = False
     batch_size: int = 1
     use: bool = False
 
@@ -74,6 +75,8 @@ class FidEvaluationCallback(Callback[Any]):
             palette_extractor_weighted=trainer.palette_extractor_weighted,
             histogram_extractor=trainer.histogram_extractor,
             folder=trainer.config.data,
+            pixel_sampler=trainer.pixel_sampler,
+            spatial_tokenizer=trainer.spatial_tokenizer,
         )
 
         logger.info(f"FID Evaluation activated with {len(self.dataset)} samples.")
@@ -110,7 +113,11 @@ class FidEvaluationCallback(Callback[Any]):
         self.fid.reset()
 
         for batch in self.dataloader:
-            result_latents = trainer.batch_inference(batch.to(device=trainer.device, dtype=trainer.dtype))
+            result_latents = trainer.batch_inference(
+                batch.to(device=trainer.device, dtype=trainer.dtype),
+                condition_scale=self.config.condition_scale,
+                use_unconditional_text_embedding=self.config.use_unconditional_text_embedding
+            )
             result_images = self.lda.latents_to_images(result_latents)
             self.fid.update(result_images, False)
         

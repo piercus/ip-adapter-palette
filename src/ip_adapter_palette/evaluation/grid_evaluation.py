@@ -48,6 +48,7 @@ class GridEvaluationConfig(CallbackConfig):
     condition_scale: float = 7.5
     batch_size: int = 1
     color_bits: int = 4
+    use_unconditional_text_embedding: bool = False
     mode: Literal['palette', 'histogram'] = 'palette'
 
 
@@ -73,7 +74,9 @@ class GridEvaluationCallback(Callback[Any]):
             histogram_extractor=trainer.histogram_extractor,
             folder=trainer.config.data,
             db_indexes=self.db_indexes,
-            prompts=self.prompts
+            prompts=self.prompts,
+            pixel_sampler=trainer.pixel_sampler,
+            spatial_tokenizer=trainer.spatial_tokenizer,
         )
 
         logger.info(f"Grid Evaluation activated with {len(self.db_indexes)} x {len(self.prompts)} samples.")
@@ -113,7 +116,11 @@ class GridEvaluationCallback(Callback[Any]):
         images : dict[str, WandbLoggable] = {}
                 
         for batch in self.dataloader:
-            result_latents = trainer.batch_inference(batch.to(device=trainer.device, dtype=trainer.dtype))
+            result_latents = trainer.batch_inference(
+                batch.to(device=trainer.device, dtype=trainer.dtype),
+                condition_scale=self.config.condition_scale,
+                use_unconditional_text_embedding=self.config.use_unconditional_text_embedding
+            )
             results = build_results(batch, result_latents, trainer, self.dataset)
         
             for prompt in list(set(results.source_prompts)):

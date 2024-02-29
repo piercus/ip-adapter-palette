@@ -2,12 +2,15 @@ from ast import Call
 from functools import cache
 from math import e
 from multiprocessing import process
-from refiners.training_utils.trainer import Batch
+from tracemalloc import start
 from torch.utils.data import Dataset
 from typing import Any, Dict, cast, TypedDict, Callable
 from refiners.training_utils.huggingface_datasets import HuggingfaceDatasetConfig, load_hf_dataset, HuggingfaceDataset
 from tqdm import tqdm
 from functools import cached_property
+from ip_adapter_palette import pixel_sampling
+from ip_adapter_palette.pixel_sampling import Sampler
+from ip_adapter_palette.spatial_palette import SpatialTokenizer
 from ip_adapter_palette.types import BatchInput
 from ip_adapter_palette.palette_adapter import PaletteExtractor
 from ip_adapter_palette.histogram import HistogramExtractor
@@ -110,8 +113,9 @@ def save_batch_as_latents(
 def load_batch_from_hf(folder: Path, hf_item: HfItem) -> BatchInput:
     photo_id = hf_item['photo_id']
     filename = folder / f"{photo_id}.pt"
-    return BatchInput.load_file(filename)
+    return BatchInput.load(filename)
 
+import time
 
 class EmbeddableDataset(Dataset[BatchInput]):
     def __init__(self,
@@ -120,7 +124,9 @@ class EmbeddableDataset(Dataset[BatchInput]):
         text_encoder: CLIPTextEncoderL,
         palette_extractor_weighted: PaletteExtractor,
         histogram_extractor: HistogramExtractor,
-        folder: Path
+        folder: Path,
+        pixel_sampler: Sampler,
+        spatial_tokenizer: SpatialTokenizer
     ):
         self.hf_dataset_config = hf_dataset_config
         self.hf_dataset = build_hf_dataset(hf_dataset_config)
@@ -130,6 +136,8 @@ class EmbeddableDataset(Dataset[BatchInput]):
         self.palette_extractor_weighted = palette_extractor_weighted
         self.histogram_extractor = histogram_extractor
         self.process_image = self.build_image_processor(hf_dataset_config)
+        self.pixel_sampler = pixel_sampler
+        self.spatial_tokenizer = spatial_tokenizer
     
     def get_processed_hf_item(self, index: int) -> HfItem:
         base_hf_item = self.hf_dataset[index]
@@ -159,13 +167,20 @@ class EmbeddableDataset(Dataset[BatchInput]):
             text_encoder: CLIPTextEncoderL,
             palette_extractor: PaletteExtractor,
             histogram_extractor: HistogramExtractor,
+            pixel_sampler: Sampler,
+            spatial_tokenizer: SpatialTokenizer,
             force: bool,
             config: HuggingfaceDatasetConfig
         ) -> BatchInput:
-
         images = [hf_item['image'] for hf_item in hf_items]
         processed_images = [self.process_image(image) for image in images]
         source_prompts = [hf_item['caption'] for hf_item in hf_items]
+        source_pixel_sampling = pixel_sampler(processed_images)
+        source_spatial_tokens = spatial_tokenizer(processed_images)
+
+        if source_pixel_sampling.shape[1] != 2048:
+            raise ValueError(f"Expected 2048, got {source_pixel_sampling.shape[1]}")
+        
         return BatchInput(
             source_palettes_weighted = [palette_extractor(processed_image) for processed_image in processed_images],
             source_prompts = source_prompts,
@@ -173,7 +188,9 @@ class EmbeddableDataset(Dataset[BatchInput]):
             photo_ids = [hf_item['photo_id'] for hf_item in hf_items],
             source_text_embeddings = text_encoder(source_prompts),
             source_latents = lda.images_to_latents(processed_images),
-            source_histograms = histogram_extractor.images_to_histograms(processed_images)
+            source_histograms = histogram_extractor.images_to_histograms(processed_images),
+            source_pixel_sampling = source_pixel_sampling,
+            source_spatial_tokens = source_spatial_tokens
         )
 
     def precompute_embeddings(self, force: bool = False, batch_size: int = 1) -> None:
@@ -203,11 +220,14 @@ class EmbeddableDataset(Dataset[BatchInput]):
                 self.text_encoder, 
                 self.palette_extractor_weighted,
                 self.histogram_extractor,
+                self.pixel_sampler,
+                self.spatial_tokenizer,
                 force, 
                 self.hf_dataset_config
             )
-            save_batch_as_latents(batch, force, self.folder)
 
+            save_batch_as_latents(batch, force, self.folder)
+    
 class GridEvalDataset(EmbeddableDataset):
     def __init__(self,
         hf_dataset_config: HuggingfaceDatasetConfig,
@@ -217,9 +237,11 @@ class GridEvalDataset(EmbeddableDataset):
         histogram_extractor: HistogramExtractor,
         db_indexes: list[int],
         prompts: list[str],
-        folder: Path
+        folder: Path,
+        pixel_sampler: Sampler,
+        spatial_tokenizer: SpatialTokenizer
     ):
-        super().__init__(hf_dataset_config, lda, text_encoder, palette_extractor_weighted, histogram_extractor, folder)
+        super().__init__(hf_dataset_config, lda, text_encoder, palette_extractor_weighted, histogram_extractor, folder, pixel_sampler, spatial_tokenizer)
         self.db_indexes = db_indexes
         self.prompts = prompts
     
@@ -249,7 +271,8 @@ class ColorDataset(EmbeddableDataset):
     
     def __getitem__(self, index: int) -> BatchInput:
         hf_item = self.hf_dataset[index]
-        return load_batch_from_hf(self.folder, hf_item)
+        batch = load_batch_from_hf(self.folder, hf_item)
+        return batch
 
 class ColorIndexesDataset(EmbeddableDataset):
     def __init__(self,
@@ -259,9 +282,11 @@ class ColorIndexesDataset(EmbeddableDataset):
         palette_extractor_weighted: PaletteExtractor,
         histogram_extractor: HistogramExtractor,
         folder: Path,
-        db_indexes: list[int]
+        db_indexes: list[int],
+        pixel_sampler: Sampler,
+        spatial_tokenizer: SpatialTokenizer
     ):
-        super().__init__(hf_dataset_config, lda, text_encoder, palette_extractor_weighted, histogram_extractor, folder)
+        super().__init__(hf_dataset_config, lda, text_encoder, palette_extractor_weighted, histogram_extractor, folder, pixel_sampler, spatial_tokenizer)
         self.db_indexes = db_indexes
     
     def __len__(self):

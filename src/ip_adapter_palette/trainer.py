@@ -23,6 +23,7 @@ from ip_adapter_palette.callback import (
 from ip_adapter_palette.evaluation.fid_evaluation import FidEvaluationCallback, FidEvaluationConfig
 from ip_adapter_palette.evaluation.grid_evaluation import GridEvaluationCallback, GridEvaluationConfig
 from ip_adapter_palette.evaluation.mmd_evaluation import MmdEvaluationCallback
+from ip_adapter_palette.evaluation.utils import get_eval_images
 from ip_adapter_palette.evaluation.visual_evaluation import VisualEvaluationCallback, VisualEvaluationConfig
 from ip_adapter_palette.histogram_auto_encoder import HistogramAutoEncoder
 from ip_adapter_palette.latent_diffusion import SD1TrainerMixin
@@ -48,6 +49,8 @@ import torch
 from torch.nn import functional as F, Module as TorchModule
 from torchvision.transforms import Compose, RandomCrop, RandomHorizontalFlip, ColorJitter, RandomGrayscale # type: ignore
 from torch import Tensor, tensor, randn, cat
+from ip_adapter_palette.pixel_sampling import Sampler, Encoder
+from ip_adapter_palette.spatial_palette import SpatialPaletteEncoder, SpatialTokenizer
 from ip_adapter_palette.types import BatchInput
 from ip_adapter_palette.config import PaletteEncoderConfig
 from refiners.training_utils.huggingface_datasets import load_hf_dataset, HuggingfaceDatasetConfig
@@ -171,13 +174,6 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     def fid_evaluation(self, config: FidEvaluationConfig) -> FidEvaluationCallback:
         return FidEvaluationCallback(config)
     
-    @cached_property
-    def data(self) -> list[BatchInput]:
-        return [
-            BatchInput.load_file(batch).to(device=self.device, dtype=self.dtype)  # type: ignore
-            for batch in self.config.data.rglob("*.pt")
-        ]
-    
     def collate_fn(self, batch: list[BatchInput]) -> BatchInput:
         return BatchInput.collate(batch)
 
@@ -193,6 +189,14 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     @no_grad()
     def unconditional_palette(self) -> list[Palette]:
         return [[]]
+    
+    @cached_property
+    def data(self) -> list[BatchInput]:
+        filenames = self.config.data.rglob("*.pt")
+        return [
+            BatchInput.load(filename).to(device=self.device, dtype=self.dtype)  # type: ignore
+            for filename in filenames
+        ]
 
     def get_item(self, index: int) -> BatchInput:
         
@@ -202,13 +206,15 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             < self.config.latent_diffusion.unconditional_sampling_probability
         ):
             item = BatchInput(
-                source_palettes_weighted = self.unconditional_palette * len(item),
+                source_palettes_weighted = item.source_palettes_weighted,
                 source_prompts = [""]*len(item),
                 source_latents = item.source_latents,
                 db_indexes = item.db_indexes,
                 photo_ids = item.photo_ids,
                 source_text_embeddings = self.unconditional_text_embedding.repeat(len(item), 1, 1),
-                source_histograms = item.source_histograms
+                source_histograms = item.source_histograms,
+                source_pixel_sampling = item.source_pixel_sampling,
+                source_spatial_tokens = item.source_spatial_tokens
             )
         return item
 
@@ -227,12 +233,52 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             ]
         return palettes
     
+    @cached_property
+    def pixel_sampler(self) -> Sampler:
+        return Sampler(
+            max_size=2048
+        )
+    
+    @cached_property
+    def pixel_sampling_encoder(self) -> Encoder:
+        return Encoder(
+            embedding_dim=self.config.palette_encoder.embedding_dim,
+            num_layers=self.config.palette_encoder.num_layers,
+            num_attention_heads=self.config.palette_encoder.num_attention_heads,
+            feedforward_dim=self.config.palette_encoder.feedforward_dim,
+            sampler=self.pixel_sampler,
+            mode=self.config.palette_encoder.mode,
+            device=self.device,
+            dtype=self.dtype
+        )
+    @cached_property
+    def spatial_tokenizer(self) -> SpatialTokenizer:
+        return SpatialTokenizer(
+            thumb_size=8,
+            input_size=512
+        )
+    
+    @cached_property
+    def spatial_palette_encoder(self) -> SpatialPaletteEncoder:
+        return SpatialPaletteEncoder(
+            embedding_dim=self.config.palette_encoder.embedding_dim,
+            num_layers=self.config.palette_encoder.num_layers,
+            num_attention_heads=2,
+            feedforward_dim=self.config.palette_encoder.feedforward_dim,
+            mode='transformer',
+            tokenizer=self.spatial_tokenizer,
+            device=self.device,
+            dtype=self.dtype
+        )
+
     def compute_loss(self, batch: BatchInput) -> torch.Tensor:
-        source_latents, text_embeddings, source_palettes, source_histograms, source_sampling = (
+        source_latents, text_embeddings, source_palettes, source_histograms, source_pixel_sampling, source_spatial_tokens = (
             batch.source_latents,
             batch.source_text_embeddings,
             batch.source_palettes_weighted,
-            batch.source_histograms
+            batch.source_histograms,
+            batch.source_pixel_sampling,
+            batch.source_spatial_tokens
         )
         if type(text_embeddings) is not torch.Tensor:
             raise ValueError(f"Text embeddings should be a tensor, not {type(text_embeddings)}")
@@ -260,9 +306,13 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
                 histogram_embeddings = self.histogram_auto_encoder.encode_sequence(source_histograms)
                 self.ip_adapter.set_palette_embedding(histogram_embeddings)
                 self.unet.set_clip_text_embedding(text_embeddings)
-            case "sampling":
-                embedding = self.sampling_encoder(source_sampling)
-                self.ip_adapter.set_palette_embedding(histogram_embeddings)
+            case "pixel_sampling":
+                embedding = self.pixel_sampling_encoder(source_pixel_sampling)
+                self.ip_adapter.set_palette_embedding(embedding)
+                self.unet.set_clip_text_embedding(text_embeddings)
+            case "spatial_palette":
+                embedding = self.spatial_palette_encoder(source_spatial_tokens)
+                self.ip_adapter.set_palette_embedding(embedding)
                 self.unet.set_clip_text_embedding(text_embeddings)
         prediction = self.unet(noisy_latents)
         loss = F.mse_loss(input=prediction, target=noise, reduction='none')
@@ -276,7 +326,9 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             text_encoder=self.text_encoder,
             palette_extractor_weighted=self.palette_extractor_weighted,
             histogram_extractor=self.histogram_extractor,
-            folder=self.config.data
+            folder=self.config.data,
+            pixel_sampler=self.pixel_sampler,
+            spatial_tokenizer=self.spatial_tokenizer,
         )
     
     def precompute(self, batch_size: int=1, force: bool=False) -> None:
@@ -314,13 +366,14 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
 
     def set_adapter_values(self, batch: BatchInput) -> None:
 
-        clip_text_embedding = cat(tensors=(batch.source_text_embeddings, batch.source_text_embeddings))
+        clip_text_embedding = cat(tensors=(self.unconditional_text_embedding.repeat(len(batch), 1, 1), batch.source_text_embeddings))
         match self.config.mode:
             case "palette":
+                palette_embeddings = self.palette_encoder.compute_palette_embedding(
+                    self.process_palettes(batch.source_palettes_weighted)
+                )
                 self.ip_adapter.set_palette_embedding(
-                    self.palette_encoder.compute_palette_embedding(
-                        self.process_palettes(batch.source_palettes_weighted)
-                    )
+                    palette_embeddings
                 )
             case "text_embedding":
                 self.ip_adapter.set_palette_embedding(
@@ -332,9 +385,26 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
                         batch.source_histograms
                     )
                 )
-    
+            case "pixel_sampling":
+                sampling = cat(tensors=(batch.source_pixel_sampling, batch.source_pixel_sampling))
+                embedding = self.pixel_sampling_encoder(sampling)
+                
+                self.ip_adapter.set_palette_embedding(
+                    embedding
+                )
+            case "spatial_palette":
+                neg_tokens = self.spatial_palette_encoder.unconditional_tokens.repeat(len(batch), 1, 1, 1)
+                tokens = cat(tensors=(neg_tokens, batch.source_spatial_tokens))
+                embedding = self.spatial_palette_encoder(tokens)
+                self.ip_adapter.set_palette_embedding(embedding)
     @scoped_seed(5)
-    def batch_inference(self, batch: BatchInput, same_seed: bool = True) -> Tensor:
+    def batch_inference(
+        self, 
+        batch: BatchInput, 
+        same_seed: bool = True, 
+        condition_scale: float = 1.0,
+        use_unconditional_text_embedding: bool = False
+    ) -> Tensor:
         batch_size = len(batch.source_prompts)
         
         logger.info(f"Inference on {batch_size} images for {batch_size}")
@@ -347,14 +417,17 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
 
         self.set_adapter_values(batch)
         uncond = self.unconditional_text_embedding.repeat(batch_size,1,1)
-        clip_text_embedding = cat(tensors=(uncond, uncond))
+        if use_unconditional_text_embedding:
+            clip_text_embedding = cat(tensors=(uncond, uncond))
+        else:
+            clip_text_embedding = cat(tensors=(uncond, batch.source_text_embeddings))
         
         for step in self.sd.steps:
             x = self.sd(
                 x,
                 step=step,
                 clip_text_embedding=clip_text_embedding,
-                condition_scale = self.config.grid_evaluation.condition_scale
+                condition_scale = condition_scale
             )
 
         return x

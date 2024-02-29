@@ -6,6 +6,7 @@ from torch.nn.functional import pad
 from torch.nn import init
 
 import refiners.fluxion.layers as fl
+from functools import cached_property
 from ip_adapter_palette.types import Color, Palette, PaletteCluster
 from refiners.fluxion.adapters.adapter import Adapter
 from refiners.fluxion.layers.attentions import ScaledDotProductAttention
@@ -100,10 +101,10 @@ class ColorEncoder(fl.Chain):
         weighted_palette: bool = False,
         use_lda : bool = False,
         device: Device | str | None = None,
+        in_features: int = 4,
         eps: float = 1e-5,
         dtype: DType | None = None,
     ) -> None:
-        in_features = 4
         if use_lda:
             in_features += 1
         if weighted_palette:
@@ -277,6 +278,9 @@ class PaletteEncoder(fl.Chain):
         device: Device | str | None = None,
         dtype: DType | None = None,
     ) -> None:
+        self.max_colors = max_colors
+        self.use_lda = use_lda
+        self.weighted_palette = weighted_palette
         self.embedding_dim = embedding_dim
         if num_layers == 0:
             encoder_body = fl.Identity()
@@ -330,10 +334,10 @@ class PaletteEncoder(fl.Chain):
 
         super().__init__(
             PalettesTokenizer(
-                max_colors=max_colors,
-                weighted_palette=weighted_palette,
+                max_colors=self.max_colors,
+                weighted_palette=self.weighted_palette,
                 lda=lda,
-                use_lda=use_lda,
+                use_lda=self.use_lda,
             ),
             fl.Converter(),
             encoder,
@@ -358,8 +362,12 @@ class PaletteEncoder(fl.Chain):
         return cat(tensors=(negative_embedding, conditional_embedding), dim=0)
     
 class PaletteCrossAttention(fl.Chain):
-    def __init__(self, text_cross_attention: fl.Attention, embedding_dim: int = 768, scale: float = 1.0) -> None:
+    def __init__(self, text_cross_attention: fl.Attention, embedding_dim: int = 768, is_causal: bool = False, scale: float = 1.0) -> None:
         self._scale = scale
+
+        if text_cross_attention.is_causal:
+            raise ValueError("Strange : the text_cross_attention is causal, it should not be the case here.")
+
         super().__init__(
             fl.Distribute(
                 fl.Identity(),
