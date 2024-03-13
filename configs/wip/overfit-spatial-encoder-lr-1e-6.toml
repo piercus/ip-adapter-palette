@@ -1,11 +1,11 @@
 data = "./weights/embeddings/"
-mode="palette"
+mode = "spatial_palette"
 [wandb]
-mode = "disabled" # "online", "offline", "disabled"
+mode = "online" # "online", "offline", "disabled"
 entity = "piercus"
 project = "color-palette"
-name = "wpalette-2-layer-mlp-cubic"
-tags = ["weighted-palette", "embeddings"]
+name = "spatial-encoder-cubic"
+tags = ["spatial-encoder", "embeddings"]
 
 [sd]
 unet = "weights/models/unet.safetensors"
@@ -13,22 +13,26 @@ text_encoder = "weights/models/CLIPTextEncoderL.safetensors"
 lda = "weights/models/lda.safetensors"
 
 [latent_diffusion]
-unconditional_sampling_probability = 0.1
+unconditional_text_sampling_probability = 1.0
 offset_noise = 0.1
+cubic = true
+learning_rate = 1e-6
 
-[palette_encoder]
-max_colors = 8
+[ip_adapter]
+embedding_dim = 10
+
+[spatial_palette_encoder]
 feedforward_dim = 20
 num_layers = 2
-mode = 'mlp'
-embedding_dim = 10
+num_attention_heads = 2
+mode = 'transformer'
 weighted_palette = false
 
 [training]
-duration = "10000:epoch"
+duration = "100:epoch"
 seed = 0
-batch_size = 1
-gradient_accumulation = "10:step"
+batch_size = 20
+gradient_accumulation = "3:step"
 # clip_grad_norm = 1.0
 # clip_grad_value = 1.0
 evaluation_interval = "10:epoch"
@@ -63,28 +67,39 @@ split = "train[200:1200]"
 hf_repo = "refiners/unsplash-25k-cogvlm-captions"
 revision = "main"
 resize_image_max_size = 512
-split = "train[200:220]"
+split = "train[200:250]"
 
 [offload_to_cpu]
 use = true
-[grid_evaluation]
+
+[visual_evaluation]
 batch_size = 12
-color_bits = 4
-db_indexes = [0, 1, 2, 3, 4, 5]#, 6, 7, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
-prompts = [
-     "A Bustling City Street",
-     "A cute cat",
-     #"An oil painting",
-     #"A photography of a beautiful woman",
-    # "A pair of shoes",
-    # "A group of working people"
-]
-condition_scale = 1.0
+condition_scale = 7.5
+db_indexes=[0, 1, 2, 3, 4, 5]
+use = true
+use_unconditional_text_embedding = true
+
+[grid_evaluation]
+# batch_size = 12
+# color_bits = 4
+# db_indexes = [0, 1, 2]#, 6, 7, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+# prompts = [
+#      "A Bustling City Street",
+#      "A cute cat",
+#      #"An oil painting",
+#      #"A photography of a beautiful woman",
+#     # "A pair of shoes",
+#     # "A group of working people"
+# ]
+# condition_scale = 7.5
+# use_unconditional_text_embedding = false
+use = false
 
 [mmd_evaluation]
-batch_size = 50
-condition_scale = 1.0
+batch_size = 12
+condition_scale = 7.5
 use = true
+use_unconditional_text_embedding = true
 
 [timestep_loss_rescaler]
 use = true

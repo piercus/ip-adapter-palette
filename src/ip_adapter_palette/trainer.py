@@ -1,7 +1,9 @@
+from atexit import register
 from functools import cached_property
 from typing import Any, Callable
 from unittest import result
 from loguru import logger
+
 import random
 import numpy as np
 from requests import get
@@ -20,12 +22,15 @@ from ip_adapter_palette.callback import (
     TimestepLossRescaler,
     TimestepLossRescalerConfig,
 )
+from ip_adapter_palette.clip_formatter_loss import CLIPFormatterLoss
 from ip_adapter_palette.evaluation.fid_evaluation import FidEvaluationCallback, FidEvaluationConfig
 from ip_adapter_palette.evaluation.grid_evaluation import GridEvaluationCallback, GridEvaluationConfig
 from ip_adapter_palette.evaluation.mmd_evaluation import MmdEvaluationCallback
 from ip_adapter_palette.evaluation.utils import get_eval_images
 from ip_adapter_palette.evaluation.visual_evaluation import VisualEvaluationCallback, VisualEvaluationConfig
+from ip_adapter_palette.generic_encoder import GenericEncoder
 from ip_adapter_palette.histogram_auto_encoder import HistogramAutoEncoder
+from ip_adapter_palette.image_encoder import ImageEncoder
 from ip_adapter_palette.latent_diffusion import SD1TrainerMixin
 from refiners.fluxion import load_from_safetensors
 from refiners.fluxion.utils import no_grad
@@ -33,13 +38,14 @@ from ip_adapter_palette.metrics.mmd import mmd
 from ip_adapter_palette.palette_adapter import SD1PaletteAdapter, PaletteEncoder, PaletteExtractor, Palette, Color
 from ip_adapter_palette.histogram import HistogramDistance, HistogramExtractor, histogram_to_histo_channels
 from ip_adapter_palette.metrics.palette import batch_image_palette_metrics, ImageAndPalette
+from refiners.foundationals.clip.image_encoder import CLIPImageEncoderH
 
 from refiners.training_utils import (
     register_model,
     register_callback,
 )
 import os
-from ip_adapter_palette.config import Config, HistogramAutoEncoderConfig, IPAdapterConfig, MmdEvaluationConfig
+from ip_adapter_palette.config import CLIPFormatterLossConfig, Config, GenericEncoderConfig, HistogramAutoEncoderConfig, IPAdapterConfig, MmdEvaluationConfig
 from ip_adapter_palette.datasets import ColorDataset, GridEvalDataset
 from refiners.foundationals.latent_diffusion.stable_diffusion_1.unet import SD1UNet
 
@@ -48,10 +54,10 @@ from refiners.training_utils.wandb import WandbMixin, WandbLoggable
 import torch
 from torch.nn import functional as F, Module as TorchModule
 from torchvision.transforms import Compose, RandomCrop, RandomHorizontalFlip, ColorJitter, RandomGrayscale # type: ignore
-from torch import Tensor, tensor, randn, cat
+from torch import Tensor, tensor, randn, cat, zeros
 from ip_adapter_palette.pixel_sampling import Sampler, Encoder
 from ip_adapter_palette.spatial_palette import SpatialPaletteEncoder, SpatialTokenizer
-from ip_adapter_palette.types import BatchInput
+from ip_adapter_palette.types import BatchInputProcessed, BatchInput
 from ip_adapter_palette.config import PaletteEncoderConfig, SpatialEncoderConfig
 from refiners.training_utils.huggingface_datasets import load_hf_dataset, HuggingfaceDatasetConfig
 
@@ -66,7 +72,7 @@ from refiners.fluxion.utils import tensor_to_images, tensor_to_image, images_to_
 from typing import TypedDict, Tuple
 from torch.nn.functional import mse_loss
 
-class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
+class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1TrainerMixin):
     def __init__(self, config: Config) -> None:
         super().__init__(config)
     
@@ -100,7 +106,19 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             device=self.device,
             dtype=self.dtype
         )
-
+    
+    @register_model()
+    def generic_encoder(self, config: GenericEncoderConfig) -> GenericEncoder:
+        
+        return GenericEncoder(
+            embedding_dim=config.embedding_dim,
+            num_layers=config.num_layers,
+            num_attention_heads=config.num_attention_heads,
+            feedforward_dim=config.feedforward_dim,
+            mode=config.mode,
+            device=self.device,
+            dtype=self.dtype
+        )
     
     @register_model()
     def palette_encoder(self, config: PaletteEncoderConfig) -> PaletteEncoder:
@@ -187,9 +205,6 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
     @register_callback()
     def fid_evaluation(self, config: FidEvaluationConfig) -> FidEvaluationCallback:
         return FidEvaluationCallback(config)
-    
-    def collate_fn(self, batch: list[BatchInput]) -> BatchInput:
-        return BatchInput.collate(batch)
 
     @cached_property
     @no_grad()
@@ -198,7 +213,17 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         embedding = self.text_encoder("")
         self.text_encoder.to(device="cpu")
         return embedding
-
+    
+    @cached_property
+    @no_grad()
+    def unconditional_image_embedding(self) -> torch.Tensor:
+        self.image_encoder.to(device=self.device)
+        # from refiners/src/refiners/foundationals/latent_diffusion/image_prompt.py
+        zero = zeros((1, 3, 224, 224), dtype=self.dtype, device=self.device)
+        embedding = self.image_encoder.from_tensor(zero)
+        self.image_encoder.to(device="cpu")
+        return embedding
+    
     @cached_property
     @no_grad()
     def unconditional_palette(self) -> list[Palette]:
@@ -212,28 +237,33 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             for filename in filenames
         ]
 
-    def get_item(self, index: int) -> BatchInput:
+    @cached_property
+    def image_encoder(self) -> ImageEncoder:
+        
+        return ImageEncoder(
+            device=self.device,
+            dtype=self.dtype
+        )
+    
+    def get_item(self, index: int) -> BatchInputProcessed:
         
         item = self.data[index]
+        rand = random.random()
         if (
-            random.random()
+            rand
             < self.config.latent_diffusion.unconditional_sampling_probability
         ):
-            item = BatchInput(
-                source_palettes_weighted = item.source_palettes_weighted,
-                source_prompts = [""]*len(item),
-                source_latents = item.source_latents,
-                db_indexes = item.db_indexes,
-                photo_ids = item.photo_ids,
-                source_text_embeddings = self.unconditional_text_embedding.repeat(len(item), 1, 1),
-                source_histograms = item.source_histograms,
-                source_pixel_sampling = item.source_pixel_sampling,
-                source_spatial_tokens = item.source_spatial_tokens
+            item = BatchInputProcessed.from_batch_input_unconditionnal(
+                item,
+                self.unconditional_text_embedding,
+                self.unconditional_image_embedding
             )
-        return item
+            return item
 
-    def collate(self, batch: list[BatchInput]) -> BatchInput:
-        return BatchInput.collate(batch)
+        return BatchInputProcessed.from_batch_input(item)
+
+    def collate_fn(self, batch: list[BatchInputProcessed]) -> BatchInputProcessed:
+        return BatchInputProcessed.collate(batch)
 
     @property
     def dataset_length(self) -> int:
@@ -272,21 +302,42 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             input_size=512
         )
     
+    @register_model()
+    def clip_formatter_loss(self, config: CLIPFormatterLossConfig) -> CLIPFormatterLoss:
+        
+        return CLIPFormatterLoss(
+            device=self.device,
+            dtype=self.dtype,
+            rank=config.rank,
+            mode=config.mode,
+            embedding_dim=config.embedding_dim
+        )
 
-    def compute_loss(self, batch: BatchInput) -> torch.Tensor:
-        source_latents, text_embeddings, source_palettes, source_histograms, source_pixel_sampling, source_spatial_tokens = (
+    def compute_loss(self, batch: BatchInputProcessed) -> list[torch.Tensor]:
+
+        (
+            source_latents, 
+            source_text_embedding, 
+            source_palettes, 
+            source_histograms, 
+            source_pixel_sampling, 
+            source_spatial_tokens, 
+            random_embedding, 
+            source_image_embedding, 
+            source_bw_image_embedding,
+            processed_text_embedding
+        ) = (
             batch.source_latents,
-            batch.source_text_embeddings,
+            batch.source_text_embedding,
             batch.source_palettes_weighted,
             batch.source_histograms,
             batch.source_pixel_sampling,
-            batch.source_spatial_tokens
+            batch.source_spatial_tokens,
+            batch.source_random_embedding,
+            batch.source_image_embedding,
+            batch.source_bw_image_embedding,
+            batch.processed_text_embedding
         )
-        if type(text_embeddings) is not torch.Tensor:
-            raise ValueError(f"Text embeddings should be a tensor, not {type(text_embeddings)}")
-        
-        if type(source_latents) is not torch.Tensor:
-            raise ValueError(f"Latents should be a tensor, not {type(source_latents)}")
 
         timestep = self.sample_timestep(source_latents.shape[0])
         self.timestep = timestep
@@ -297,28 +348,33 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
 
         match self.config.mode:
             case "palette":
-                processed = self.process_palettes(source_palettes)
-                palette_embeddings = self.palette_encoder(processed)
-                self.ip_adapter.set_palette_embedding(palette_embeddings)
-                self.unet.set_clip_text_embedding(text_embeddings)
+                palette_embeddings = self.palette_encoder(self.process_palettes(source_palettes))
             case "text_embedding":
-                self.ip_adapter.set_palette_embedding(text_embeddings)
-                self.unet.set_clip_text_embedding(self.unconditional_text_embedding)
+                palette_embeddings = source_text_embedding
+            case "image_embedding":
+                palette_embeddings = source_image_embedding
+            case "bw_image_embedding":
+                palette_embeddings = source_bw_image_embedding                           
             case "histogram":
-                histogram_embeddings = self.histogram_auto_encoder.encode_sequence(source_histograms)
-                self.ip_adapter.set_palette_embedding(histogram_embeddings)
-                self.unet.set_clip_text_embedding(text_embeddings)
+                palette_embeddings = self.histogram_auto_encoder.encode_sequence(source_histograms)
             case "pixel_sampling":
-                embedding = self.pixel_sampling_encoder(source_pixel_sampling)
-                self.ip_adapter.set_palette_embedding(embedding)
-                self.unet.set_clip_text_embedding(text_embeddings)
+                palette_embeddings = self.pixel_sampling_encoder(source_pixel_sampling)
             case "spatial_palette":
-                embedding = self.spatial_palette_encoder(source_spatial_tokens)
-                self.ip_adapter.set_palette_embedding(embedding)
-                self.unet.set_clip_text_embedding(text_embeddings)
+                palette_embeddings = self.spatial_palette_encoder(source_spatial_tokens)
+            case "random_embedding":
+                palette_embeddings = self.generic_encoder(random_embedding)
+        
+        self.unet.set_clip_text_embedding(processed_text_embedding)
+        self.ip_adapter.set_palette_embedding(palette_embeddings)
+
         prediction = self.unet(noisy_latents)
-        loss = F.mse_loss(input=prediction, target=noise, reduction='none')
-        return loss
+        losses = [F.mse_loss(input=prediction, target=noise, reduction='none')]
+
+        if self.config.clip_formatter_loss.scale > 0:
+            clip_formatter_loss = self.clip_formatter_loss(palette_embeddings, source_image_embedding, source_bw_image_embedding).mean()
+            losses.append(self.config.clip_formatter_loss.scale*clip_formatter_loss)
+
+        return losses
     
     @cached_property
     def hf_train_dataset(self) -> ColorDataset:
@@ -326,6 +382,7 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
             hf_dataset_config=self.config.dataset,
             lda=self.lda,
             text_encoder=self.text_encoder,
+            image_encoder=self.image_encoder,
             palette_extractor_weighted=self.palette_extractor_weighted,
             histogram_extractor=self.histogram_extractor,
             folder=self.config.data,
@@ -368,7 +425,10 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
 
     def set_adapter_values(self, batch: BatchInput) -> None:
 
-        clip_text_embedding = cat(tensors=(self.unconditional_text_embedding.repeat(len(batch), 1, 1), batch.source_text_embeddings))
+        clip_text_embedding = cat(tensors=(self.unconditional_text_embedding.repeat(len(batch), 1, 1), batch.source_text_embedding))
+        clip_image_embedding = cat(tensors=(self.unconditional_image_embedding.repeat(len(batch), 1, 1), batch.source_image_embedding))
+        clip_bw_image_embedding = cat(tensors=(self.unconditional_image_embedding.repeat(len(batch), 1, 1), batch.source_bw_image_embedding))
+
         match self.config.mode:
             case "palette":
                 palette_embeddings = self.palette_encoder.compute_palette_embedding(
@@ -381,6 +441,14 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
                 self.ip_adapter.set_palette_embedding(
                     clip_text_embedding
                 )
+            case "image_embedding":
+                self.ip_adapter.set_palette_embedding(
+                    clip_image_embedding
+                )
+            case "bw_image_embedding":
+                self.ip_adapter.set_palette_embedding(
+                    clip_bw_image_embedding
+                )                              
             case "histogram":
                 self.ip_adapter.set_palette_embedding(
                     self.histogram_auto_encoder.compute_histogram_embedding(
@@ -399,6 +467,12 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
                 tokens = cat(tensors=(neg_tokens, batch.source_spatial_tokens))
                 embedding = self.spatial_palette_encoder(tokens)
                 self.ip_adapter.set_palette_embedding(embedding)
+            case "random_embedding":
+                rnd_embedding = cat(tensors=(self.unconditional_text_embedding.repeat(len(batch), 1, 1), batch.source_random_embedding))
+                self.ip_adapter.set_palette_embedding(
+                    rnd_embedding
+                )
+            
     @scoped_seed(5)
     def batch_inference(
         self, 
@@ -422,7 +496,7 @@ class PaletteTrainer(Trainer[Config, BatchInput], WandbMixin, SD1TrainerMixin):
         if use_unconditional_text_embedding:
             clip_text_embedding = cat(tensors=(uncond, uncond))
         else:
-            clip_text_embedding = cat(tensors=(uncond, batch.source_text_embeddings))
+            clip_text_embedding = cat(tensors=(uncond, batch.source_text_embedding))
         
         for step in self.sd.steps:
             x = self.sd(

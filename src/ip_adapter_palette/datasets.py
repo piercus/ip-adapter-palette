@@ -18,13 +18,14 @@ from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from datasets import load_dataset, DownloadManager, Image as DatasetImage # type: ignore
 import os
-from torch import save, load, Tensor
+from torch import save, load, Tensor, rand
 from PIL import Image
 from pathlib import Path
 from loguru import logger
 from refiners.foundationals.latent_diffusion import LatentDiffusionAutoencoder
 from refiners.foundationals.clip.text_encoder import CLIPTextEncoderL
 from refiners.fluxion.utils import image_to_tensor
+from ip_adapter_palette.image_encoder import ImageEncoder
 class HfItem(TypedDict):
     photo_id: str
     image: Image.Image
@@ -117,11 +118,14 @@ def load_batch_from_hf(folder: Path, hf_item: HfItem) -> BatchInput:
 
 import time
 
+
+
 class EmbeddableDataset(Dataset[BatchInput]):
     def __init__(self,
         hf_dataset_config: HuggingfaceDatasetConfig,
         lda: LatentDiffusionAutoencoder,
         text_encoder: CLIPTextEncoderL,
+        image_encoder: ImageEncoder,
         palette_extractor_weighted: PaletteExtractor,
         histogram_extractor: HistogramExtractor,
         folder: Path,
@@ -132,9 +136,11 @@ class EmbeddableDataset(Dataset[BatchInput]):
         self.hf_dataset = build_hf_dataset(hf_dataset_config)
         self.lda = lda
         self.text_encoder = text_encoder
+        self.image_encoder = image_encoder
         self.folder = folder
         self.palette_extractor_weighted = palette_extractor_weighted
         self.histogram_extractor = histogram_extractor
+        self.process_image = self.build_image_processor(hf_dataset_config)
         self.process_image = self.build_image_processor(hf_dataset_config)
         self.pixel_sampler = pixel_sampler
         self.spatial_tokenizer = spatial_tokenizer
@@ -160,11 +166,15 @@ class EmbeddableDataset(Dataset[BatchInput]):
             return center_crop(img)
         return process_image
     
+    def remove_colors(self, images: list[Image.Image]) -> list[Image.Image]:
+        return [image.convert("L").convert("RGB") for image in images]
+    
     def build_batch_from_hf_items(
             self,
             hf_items: list[HfItem],
             lda: LatentDiffusionAutoencoder,
             text_encoder: CLIPTextEncoderL,
+            image_encoder: ImageEncoder,
             palette_extractor: PaletteExtractor,
             histogram_extractor: HistogramExtractor,
             pixel_sampler: Sampler,
@@ -186,7 +196,10 @@ class EmbeddableDataset(Dataset[BatchInput]):
             source_prompts = source_prompts,
             db_indexes = [hf_item['db_index'] for hf_item in hf_items],
             photo_ids = [hf_item['photo_id'] for hf_item in hf_items],
-            source_text_embeddings = text_encoder(source_prompts),
+            source_text_embedding = text_encoder(source_prompts),
+            source_image_embedding = image_encoder(processed_images),
+            source_bw_image_embedding = image_encoder(self.remove_colors(processed_images)),
+            source_random_embedding = rand((1, 77, 768)),
             source_latents = lda.images_to_latents(processed_images),
             source_histograms = histogram_extractor.images_to_histograms(processed_images),
             source_pixel_sampling = source_pixel_sampling,
@@ -218,6 +231,7 @@ class EmbeddableDataset(Dataset[BatchInput]):
                 filtered,
                 self.lda, 
                 self.text_encoder, 
+                self.image_encoder,
                 self.palette_extractor_weighted,
                 self.histogram_extractor,
                 self.pixel_sampler,
@@ -233,6 +247,7 @@ class GridEvalDataset(EmbeddableDataset):
         hf_dataset_config: HuggingfaceDatasetConfig,
         lda: LatentDiffusionAutoencoder,
         text_encoder: CLIPTextEncoderL,
+        image_encoder: ImageEncoder,
         palette_extractor_weighted: PaletteExtractor,
         histogram_extractor: HistogramExtractor,
         db_indexes: list[int],
@@ -241,7 +256,7 @@ class GridEvalDataset(EmbeddableDataset):
         pixel_sampler: Sampler,
         spatial_tokenizer: SpatialTokenizer
     ):
-        super().__init__(hf_dataset_config, lda, text_encoder, palette_extractor_weighted, histogram_extractor, folder, pixel_sampler, spatial_tokenizer)
+        super().__init__(hf_dataset_config, lda, text_encoder, image_encoder, palette_extractor_weighted, histogram_extractor, folder, pixel_sampler, spatial_tokenizer)
         self.db_indexes = db_indexes
         self.prompts = prompts
     
@@ -261,7 +276,7 @@ class GridEvalDataset(EmbeddableDataset):
         if len(item) != 1:
             raise ValueError(f"Loading failed, expected 1 item, got {len(item)}")
         item.source_prompts = [prompt]
-        item.source_text_embeddings = self.prompts_embeddings[prompt_index:prompt_index+1]
+        item.source_text_embedding = self.prompts_embeddings[prompt_index:prompt_index+1]
         return item
 
 
@@ -279,6 +294,7 @@ class ColorIndexesDataset(EmbeddableDataset):
         hf_dataset_config: HuggingfaceDatasetConfig,
         lda: LatentDiffusionAutoencoder,
         text_encoder: CLIPTextEncoderL,
+        image_encoder: ImageEncoder,
         palette_extractor_weighted: PaletteExtractor,
         histogram_extractor: HistogramExtractor,
         folder: Path,
@@ -286,7 +302,7 @@ class ColorIndexesDataset(EmbeddableDataset):
         pixel_sampler: Sampler,
         spatial_tokenizer: SpatialTokenizer
     ):
-        super().__init__(hf_dataset_config, lda, text_encoder, palette_extractor_weighted, histogram_extractor, folder, pixel_sampler, spatial_tokenizer)
+        super().__init__(hf_dataset_config, lda, text_encoder, image_encoder, palette_extractor_weighted, histogram_extractor, folder, pixel_sampler, spatial_tokenizer)
         self.db_indexes = db_indexes
     
     def __len__(self):

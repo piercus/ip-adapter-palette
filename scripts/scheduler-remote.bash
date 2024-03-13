@@ -2,8 +2,8 @@
 
 # Path to the directory containing the config files
 config_dir="./configs/scheduled"
-prefix="overfit-"
-script="./scripts/training/train.py"
+prefix=""
+script="./scripts/train.py"
 # Log file path
 log_file="./tmp/schedule-log.txt"
 

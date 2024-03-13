@@ -70,6 +70,7 @@ class GridEvaluationCallback(Callback[Any]):
             hf_dataset_config=trainer.config.eval_dataset,
             lda=trainer.lda,
             text_encoder=trainer.text_encoder,
+            image_encoder=trainer.image_encoder,
             palette_extractor_weighted=trainer.palette_extractor_weighted,
             histogram_extractor=trainer.histogram_extractor,
             folder=trainer.config.data,

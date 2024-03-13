@@ -1,40 +1,32 @@
 data = "./weights/embeddings/"
-mode = "spatial_palette"
+mode = "random_embedding"
 [wandb]
 mode = "online" # "online", "offline", "disabled"
 entity = "piercus"
 project = "color-palette"
-name = "spatial-encoder-cubic"
-tags = ["spatial-encoder", "embeddings"]
+name = "rnd-clip-like-loss-uncond-1.0"
+tags = ["200db", "random-embedding", "uncond-1.0", "clip-loss"]
 
 [sd]
 unet = "weights/models/unet.safetensors"
 text_encoder = "weights/models/CLIPTextEncoderL.safetensors"
 lda = "weights/models/lda.safetensors"
 
-[latent_diffusion]
-unconditional_text_sampling_probability = 1.0
-offset_noise = 0.1
-cubic = true
-
 [ip_adapter]
-embedding_dim = 10
+embedding_dim = 768
 
-[spatial_palette_encoder]
-feedforward_dim = 20
-num_layers = 2
-num_attention_heads = 2
-mode = 'transformer'
-weighted_palette = false
+[latent_diffusion]
+unconditional_sampling_probability = 1.0
+offset_noise = 0.1
 
 [training]
-duration = "100:epoch"
+duration = "400:epoch"
 seed = 0
 batch_size = 20
-gradient_accumulation = "3:step"
+gradient_accumulation = "10:step"
 # clip_grad_norm = 1.0
 # clip_grad_value = 1.0
-evaluation_interval = "10:epoch"
+evaluation_interval = "50:epoch"
 evaluation_seed = 1
 # num_workers = 8
 # use_color_loss = false
@@ -60,7 +52,7 @@ warmup = "500:step"
 hf_repo = "refiners/unsplash-25k-cogvlm-captions"
 revision = "main"
 resize_image_max_size = 512
-split = "train[200:1200]"
+split = "train[200:400]"
 
 [eval_dataset]
 hf_repo = "refiners/unsplash-25k-cogvlm-captions"
@@ -71,34 +63,33 @@ split = "train[200:250]"
 [offload_to_cpu]
 use = true
 
+[grid_evaluation]
+use = false
+
 [visual_evaluation]
 batch_size = 12
-condition_scale = 7.5
+condition_scale = 1.0
 db_indexes=[0, 1, 2, 3, 4, 5]
 use = true
 use_unconditional_text_embedding = true
 
-[grid_evaluation]
-# batch_size = 12
-# color_bits = 4
-# db_indexes = [0, 1, 2]#, 6, 7, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
-# prompts = [
-#      "A Bustling City Street",
-#      "A cute cat",
-#      #"An oil painting",
-#      #"A photography of a beautiful woman",
-#     # "A pair of shoes",
-#     # "A group of working people"
-# ]
-# condition_scale = 7.5
-# use_unconditional_text_embedding = false
-use = false
-
 [mmd_evaluation]
 batch_size = 12
-condition_scale = 7.5
+condition_scale = 1.0
 use = true
 use_unconditional_text_embedding = true
 
 [timestep_loss_rescaler]
 use = true
+
+[clip_formatter_loss]
+scale = 1.0
+mode = "cross_attention"
+
+[save_best_model]
+overwrite = true
+
+[generic_encoder]
+num_layers = 2
+feedforward_dim = 128
+mode='mlp'

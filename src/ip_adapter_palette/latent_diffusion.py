@@ -93,7 +93,7 @@ class SD1TrainerMixin(ABC):
     @cached_property
     def text_encoder(self) -> CLIPTextEncoderL:
         return self.sd.clip_text_encoder
-
+    
     @cached_property
     def unet(self) -> SD1UNet:
         return self.sd.unet
