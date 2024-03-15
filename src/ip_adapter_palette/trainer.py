@@ -117,6 +117,7 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
             feedforward_dim=config.feedforward_dim,
             mode=config.mode,
             input_dim=config.input_dim,
+            output_len=config.output_len,
             device=self.device,
             dtype=self.dtype
         )
@@ -350,8 +351,8 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
         self.unet.set_timestep(timestep)
 
         match self.config.mode:
-            case "palette":
-                palette_embeddings = self.palette_encoder(self.process_palettes(source_palettes))
+            # case "palette":
+            #     palette_embeddings = self.palette_encoder(self.process_palettes(source_palettes))
             case "text_embedding":
                 palette_embeddings = source_text_embedding
             case "image_embedding":
@@ -367,7 +368,7 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
             case "random_embedding":
                 palette_embeddings = self.generic_encoder(random_embedding)
             case "random_long_embedding":
-                palette_embeddings = self.generic_encoder(source_random_long_embedding)
+                palette_embeddings = self.generic_encoder(source_random_long_embedding[:,:,0:self.config.generic_encoder.input_dim])
             case "random_short_embedding":
                 palette_embeddings = self.generic_encoder(random_embedding[:,0:8,:])
             case "random_small_embedding":
@@ -483,8 +484,8 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
                     self.generic_encoder(rnd_embedding)
                 )
             case "random_long_embedding":
-                unconditionnal = zeros((len(batch), 2048, 10), dtype=self.dtype, device=self.device)
-                rnd_embedding = cat(tensors=(unconditionnal, batch.source_random_long_embedding))
+                unconditionnal = zeros((len(batch), 2048, self.config.generic_encoder.input_dim), dtype=self.dtype, device=self.device)
+                rnd_embedding = cat(tensors=(unconditionnal, batch.source_random_long_embedding[:,:,0:self.config.generic_encoder.input_dim]))
                 self.ip_adapter.set_palette_embedding(
                     self.generic_encoder(rnd_embedding)
                 )

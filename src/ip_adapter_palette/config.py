@@ -30,9 +30,9 @@ class IPAdapterConfig(ModelConfig):
 
 class PaletteEncoderConfig(ModelConfig):
     weights: Path | None = None
-    feedforward_dim: int = 3072
+    feedforward_dim: int = 10
     num_attention_heads: int = 2 # 12, reduced for embedding_dim=768
-    num_layers: int = 12
+    num_layers: int = 2
     trigger_phrase: str = ""
     use_only_trigger_probability: float = 0.0
     max_colors: int = 8
@@ -69,6 +69,7 @@ class GenericEncoderConfig(ModelConfig):
     feedforward_dim: int = 20
     mode: str = 'transformer'
     input_dim: int = 768
+    output_len: int | None = None
 
 class Config(BaseConfig):
     latent_diffusion: LatentDiffusionConfig

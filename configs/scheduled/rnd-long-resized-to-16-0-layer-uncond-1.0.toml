@@ -1,0 +1,97 @@
+data = "./weights/embeddings/"
+mode = "random_long_embedding"
+[wandb]
+mode = "online" # "online", "offline", "disabled"
+entity = "piercus"
+project = "color-palette"
+name = "rnd-long-resized-to-16-0-layer-uncond-1.0"
+tags = ["200db", "random-long-small8-embedding", "resized-input-len-16", "uncond-1.0"]
+
+[sd]
+unet = "weights/models/unet.safetensors"
+text_encoder = "weights/models/CLIPTextEncoderL.safetensors"
+lda = "weights/models/lda.safetensors"
+
+[ip_adapter]
+embedding_dim = 768
+
+[latent_diffusion]
+unconditional_sampling_probability = 1.0
+offset_noise = 0.1
+
+[training]
+duration = "800:epoch"
+seed = 0
+batch_size = 20
+gradient_accumulation = "10:step"
+# clip_grad_norm = 1.0
+# clip_grad_value = 1.0
+evaluation_interval = "50:epoch"
+evaluation_seed = 1
+# num_workers = 8
+# use_color_loss = false
+device="cuda:0"
+dtype="bfloat16"
+
+[monitor_gradient]
+patterns = ["ip_adapter.*"]
+
+[optimizer]
+optimizer = "AdamW" # "SGD", "Adam", "AdamW", "AdamW8bit", "Lion8bit"
+learning_rate = 1e-4
+betas = [0.9, 0.999]
+eps = 1e-8
+weight_decay = 1e-2
+
+[lr_scheduler]
+type = "ConstantLR"
+update_interval = "1:step"
+warmup = "500:step"
+
+[dataset]
+hf_repo = "refiners/unsplash-25k-cogvlm-captions"
+revision = "main"
+resize_image_max_size = 512
+split = "train[200:400]"
+
+[eval_dataset]
+hf_repo = "refiners/unsplash-25k-cogvlm-captions"
+revision = "main"
+resize_image_max_size = 512
+split = "train[200:250]"
+
+[offload_to_cpu]
+use = true
+
+[grid_evaluation]
+use = false
+
+[visual_evaluation]
+batch_size = 12
+condition_scale = 1.0
+db_indexes=[0, 1, 2, 3, 4, 5]
+use = true
+use_unconditional_text_embedding = true
+
+[mmd_evaluation]
+batch_size = 12
+condition_scale = 1.0
+use = true
+use_unconditional_text_embedding = true
+
+[timestep_loss_rescaler]
+use = true
+
+[clip_formatter_loss]
+scale = 0
+
+[save_best_model]
+overwrite = true
+
+[generic_encoder]
+num_layers = 0
+embedding_dim = 768
+feedforward_dim = 128
+input_dim = 8
+output_len = 16
+mode='mlp'

@@ -91,11 +91,42 @@ class MLPEncoder(fl.Chain):
         )
 
 
+class CrossAttentionChangeLength(fl.Chain):
+    def __init__(
+        self,
+        embedding_dim: int,
+        output_len: int,
+        num_heads: int = 1,
+        inner_dim: int | None = None,
+        input_dim: int | None = None,
+        device: Device | str | None = None,
+        dtype: DType | None = None,
+    ) -> None:
+        super().__init__(
+            fl.Parallel(
+                fl.Parameter(output_len, embedding_dim),
+                fl.Identity(),
+                fl.Identity(),
+            ),
+            fl.Attention(
+                embedding_dim=embedding_dim,
+                key_embedding_dim=input_dim,
+                value_embedding_dim=input_dim,
+                inner_dim=inner_dim,
+                num_heads=num_heads,
+                use_bias=False,
+                device=device,
+                dtype=dtype,
+            )
+        )
+
+
 class GenericEncoder(fl.Chain):
     def __init__(
         self,
         input_dim: int = 768,
         embedding_dim: int = 768,
+        output_len: int | None = None,
         num_layers: int = 2,
         num_attention_heads: int = 2,
         feedforward_dim: int = 20,
@@ -104,17 +135,25 @@ class GenericEncoder(fl.Chain):
         device: Device | str | None = None,
         dtype: DType | None = None,
     ) -> None:
-        self.embedding_dim = embedding_dim
-
-        if input_dim != embedding_dim:
+        empty = True
+        if output_len is not None:
+            encoder_head = CrossAttentionChangeLength(
+                embedding_dim=embedding_dim,
+                input_dim=input_dim,
+                inner_dim=feedforward_dim,
+                output_len=output_len,
+                device=device,
+                dtype=dtype
+            )
+            empty = False
+        elif input_dim != embedding_dim:
             encoder_head = fl.Linear(in_features=input_dim, out_features=embedding_dim, bias=False, device=device, dtype=dtype)
+            empty = False
         else: 
             encoder_head = fl.Identity()
-        
-        if num_layers == 0:
-            encoder_body = fl.Identity()
-            encoder_tail = fl.Identity()
-        elif mode == 'transformer':
+
+        if mode == 'transformer' and num_layers > 0:
+            empty = False
             encoder_body = TransformerEncoder(
                 embedding_dim=embedding_dim,
                 num_layers=num_layers,
@@ -124,8 +163,8 @@ class GenericEncoder(fl.Chain):
                 device=device,
                 dtype=dtype
             )
-            encoder_tail = fl.LayerNorm(normalized_shape=embedding_dim, eps=layer_norm_eps, device=device, dtype=dtype)
-        elif mode == 'mlp':
+        elif mode == 'mlp' and num_layers > 0:
+            empty = False
             encoder_body = fl.Chain(
                 MLPEncoder(
                     embedding_dim=embedding_dim,
@@ -136,10 +175,13 @@ class GenericEncoder(fl.Chain):
                     dtype=dtype
                 ),
             )
-            encoder_tail = fl.LayerNorm(normalized_shape=embedding_dim, eps=layer_norm_eps, device=device, dtype=dtype)
-        else:
-            raise ValueError(f"Unknown mode {mode}")
+        else: 
+            encoder_body = fl.Identity()
         
+        if empty:
+            encoder_tail = fl.Identity()
+        else:
+            encoder_tail = fl.LayerNorm(normalized_shape=embedding_dim, eps=layer_norm_eps, device=device, dtype=dtype)
 
         super().__init__(
             encoder_head,
