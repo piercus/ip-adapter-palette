@@ -80,11 +80,10 @@ class MLPEncoder(fl.Chain):
                         device=device,
                         dtype=dtype,
                     ),
-                    FeedForward(
-                        embedding_dim=embedding_dim,
-                        feedforward_dim=feedforward_dim,
-                        device=device,
-                        dtype=dtype,
+                    fl.Chain(
+                        fl.Linear(in_features=embedding_dim, out_features=feedforward_dim, bias=False, device=device, dtype=dtype),
+                        fl.GeLU(),
+                        fl.Linear(in_features=feedforward_dim, out_features=embedding_dim, bias=False, device=device, dtype=dtype),
                     )
                 )
                 for _ in range(num_layers)
@@ -95,6 +94,7 @@ class MLPEncoder(fl.Chain):
 class GenericEncoder(fl.Chain):
     def __init__(
         self,
+        input_dim: int = 768,
         embedding_dim: int = 768,
         num_layers: int = 2,
         num_attention_heads: int = 2,
@@ -105,8 +105,15 @@ class GenericEncoder(fl.Chain):
         dtype: DType | None = None,
     ) -> None:
         self.embedding_dim = embedding_dim
+
+        if input_dim != embedding_dim:
+            encoder_head = fl.Linear(in_features=input_dim, out_features=embedding_dim, bias=False, device=device, dtype=dtype)
+        else: 
+            encoder_head = fl.Identity()
+        
         if num_layers == 0:
             encoder_body = fl.Identity()
+            encoder_tail = fl.Identity()
         elif mode == 'transformer':
             encoder_body = TransformerEncoder(
                 embedding_dim=embedding_dim,
@@ -117,21 +124,26 @@ class GenericEncoder(fl.Chain):
                 device=device,
                 dtype=dtype
             )
+            encoder_tail = fl.LayerNorm(normalized_shape=embedding_dim, eps=layer_norm_eps, device=device, dtype=dtype)
         elif mode == 'mlp':
-            encoder_body = MLPEncoder(
-                embedding_dim=embedding_dim,
-                num_layers=num_layers,
-                feedforward_dim=feedforward_dim,
-                layer_norm_eps=layer_norm_eps,
-                device=device,
-                dtype=dtype
+            encoder_body = fl.Chain(
+                MLPEncoder(
+                    embedding_dim=embedding_dim,
+                    num_layers=num_layers,
+                    feedforward_dim=feedforward_dim,
+                    layer_norm_eps=layer_norm_eps,
+                    device=device,
+                    dtype=dtype
+                ),
             )
+            encoder_tail = fl.LayerNorm(normalized_shape=embedding_dim, eps=layer_norm_eps, device=device, dtype=dtype)
         else:
             raise ValueError(f"Unknown mode {mode}")
         
 
         super().__init__(
+            encoder_head,
             encoder_body,
-            fl.LayerNorm(normalized_shape=embedding_dim, eps=layer_norm_eps, device=device, dtype=dtype),
+            encoder_tail
         )
     

@@ -116,6 +116,7 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
             num_attention_heads=config.num_attention_heads,
             feedforward_dim=config.feedforward_dim,
             mode=config.mode,
+            input_dim=config.input_dim,
             device=self.device,
             dtype=self.dtype
         )
@@ -146,7 +147,7 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
             weights = load_from_safetensors(config.weights)
         else:
             weights = None
-        
+
         ip_adapter = SD1PaletteAdapter(
             self.unet,
             embedding_dim= config.embedding_dim,
@@ -323,6 +324,7 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
             source_pixel_sampling, 
             source_spatial_tokens, 
             random_embedding, 
+            source_random_long_embedding,
             source_image_embedding, 
             source_bw_image_embedding,
             processed_text_embedding
@@ -334,6 +336,7 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
             batch.source_pixel_sampling,
             batch.source_spatial_tokens,
             batch.source_random_embedding,
+            batch.source_random_long_embedding,
             batch.source_image_embedding,
             batch.source_bw_image_embedding,
             batch.processed_text_embedding
@@ -363,7 +366,14 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
                 palette_embeddings = self.spatial_palette_encoder(source_spatial_tokens)
             case "random_embedding":
                 palette_embeddings = self.generic_encoder(random_embedding)
-        
+            case "random_long_embedding":
+                palette_embeddings = self.generic_encoder(source_random_long_embedding)
+            case "random_short_embedding":
+                palette_embeddings = self.generic_encoder(random_embedding[:,0:8,:])
+            case "random_small_embedding":
+                palette_embeddings = self.generic_encoder(random_embedding[:,:,0:self.config.generic_encoder.input_dim])                              
+            case "image_embedding_diff":
+                palette_embeddings = source_image_embedding - source_bw_image_embedding
         self.unet.set_clip_text_embedding(processed_text_embedding)
         self.ip_adapter.set_palette_embedding(palette_embeddings)
 
@@ -470,9 +480,31 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
             case "random_embedding":
                 rnd_embedding = cat(tensors=(self.unconditional_text_embedding.repeat(len(batch), 1, 1), batch.source_random_embedding))
                 self.ip_adapter.set_palette_embedding(
-                    rnd_embedding
+                    self.generic_encoder(rnd_embedding)
                 )
-            
+            case "random_long_embedding":
+                unconditionnal = zeros((len(batch), 2048, 10), dtype=self.dtype, device=self.device)
+                rnd_embedding = cat(tensors=(unconditionnal, batch.source_random_long_embedding))
+                self.ip_adapter.set_palette_embedding(
+                    self.generic_encoder(rnd_embedding)
+                )
+            case "random_short_embedding":
+                unconditionnal = zeros((len(batch), 8, 768), dtype=self.dtype, device=self.device)
+                rnd_embedding = cat(tensors=(unconditionnal, batch.source_random_embedding[:,0:8,:]))
+                self.ip_adapter.set_palette_embedding(
+                    self.generic_encoder(rnd_embedding)
+                )
+            case "random_small_embedding":
+                unconditionnal = zeros((len(batch), 77, self.config.generic_encoder.input_dim), dtype=self.dtype, device=self.device)
+                rnd_embedding = cat(tensors=(unconditionnal, batch.source_random_embedding[:,:,0:self.config.generic_encoder.input_dim]))
+                self.ip_adapter.set_palette_embedding(
+                    self.generic_encoder(rnd_embedding)
+                )
+            case "image_embedding_diff":
+                image_embedding_diff_embedding = cat(tensors=(self.unconditional_image_embedding.repeat(len(batch), 1, 1), batch.source_image_embedding - batch.source_bw_image_embedding))
+                self.ip_adapter.set_palette_embedding(
+                    image_embedding_diff_embedding
+                )
     @scoped_seed(5)
     def batch_inference(
         self, 

@@ -144,6 +144,7 @@ class MmdEvaluationCallback(Callback[Any]):
             source_image_embedding=batch.source_image_embedding,
             source_bw_image_embedding=batch.source_bw_image_embedding,
             source_random_embedding=batch.source_random_embedding,
+            source_random_long_embedding=batch.source_random_long_embedding,
             source_latents=batch.source_latents,
             db_indexes=batch.db_indexes,
             photo_ids=batch.photo_ids,

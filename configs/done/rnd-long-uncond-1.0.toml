@@ -1,11 +1,11 @@
 data = "./weights/embeddings/"
-mode = "random_embedding"
+mode = "random_long_embedding"
 [wandb]
 mode = "online" # "online", "offline", "disabled"
 entity = "piercus"
 project = "color-palette"
-name = "rnd-uncond-1.0"
-tags = ["200db", "random-embedding", "uncond-1.0"]
+name = "rnd-long-uncond-1.0"
+tags = ["200db", "random-long-embedding", "uncond-1.0"]
 
 [sd]
 unet = "weights/models/unet.safetensors"
@@ -13,17 +13,17 @@ text_encoder = "weights/models/CLIPTextEncoderL.safetensors"
 lda = "weights/models/lda.safetensors"
 
 [ip_adapter]
-embedding_dim = 768
+embedding_dim = 10
 
 [latent_diffusion]
 unconditional_sampling_probability = 1.0
 offset_noise = 0.1
 
 [training]
-duration = "400:epoch"
+duration = "800:epoch"
 seed = 0
-batch_size = 20
-gradient_accumulation = "10:step"
+batch_size = 10
+gradient_accumulation = "20:step"
 # clip_grad_norm = 1.0
 # clip_grad_value = 1.0
 evaluation_interval = "50:epoch"
@@ -89,6 +89,6 @@ scale = 0
 overwrite = true
 
 [generic_encoder]
-num_layers = 2
+num_layers = 0
 feedforward_dim = 128
 mode='mlp'

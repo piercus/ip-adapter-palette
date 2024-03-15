@@ -367,7 +367,7 @@ class PaletteCrossAttention(fl.Chain):
 
         if text_cross_attention.is_causal:
             raise ValueError("Strange : the text_cross_attention is causal, it should not be the case here.")
-
+        
         super().__init__(
             fl.Distribute(
                 fl.Identity(),
@@ -481,7 +481,9 @@ class SD1PaletteAdapter(fl.Chain, Adapter[TSDNet]):
     ) -> None:
         with self.setup_adapter(target):
             super().__init__(target)
+        
 
+        
         self.sub_adapters: list[PaletteCrossAttentionAdapter] = [
             PaletteCrossAttentionAdapter(
                 target=cross_attn, scale=scale, embedding_dim=embedding_dim
@@ -490,38 +492,49 @@ class SD1PaletteAdapter(fl.Chain, Adapter[TSDNet]):
         ]
         
         if weights is not None:
-            raise NotImplementedError("Loading weights is not implemented yet")
-            # palette_state_dict: dict[str, Tensor] = {
-            #     k.removeprefix("palette_encoder."): v for k, v in weights.items() if k.startswith("palette_encoder.")
-            # }
-            # self._palette_encoder[0].load_state_dict(palette_state_dict)
+            self.load_state_dict(weights, strict=False)            
+            # raise NotImplementedError("Loading weights is not implemented yet")
+            # # palette_state_dict: dict[str, Tensor] = {
+            # #     k.removeprefix("palette_encoder."): v for k, v in weights.items() if k.startswith("palette_encoder.")
+            # # }
+            # # self._palette_encoder[0].load_state_dict(palette_state_dict)
             
-            # for i, cross_attn in enumerate(self.sub_adapters):
-            #     # cross_attention_weights: list[Tensor] = []
+            # # for i, cross_attn in enumerate(self.sub_adapters):
+            # #     # cross_attention_weights: list[Tensor] = []
                 
-            #     ## Tmp code
-            #     index = i*2
-            #     index2 = index + 1
-            #     cross_attn.load_weights(
-            #         weights[f"palette_adapter.{index:03d}"],
-            #         weights[f"palette_adapter.{index2:03d}"],
-            #     )
+            # #     ## Tmp code
+            # #     index = i*2
+            # #     index2 = index + 1
+            # #     cross_attn.load_weights(
+            # #         weights[f"palette_adapter.{index:03d}"],
+            # #         weights[f"palette_adapter.{index2:03d}"],
+            # #     )
                 
-                # prefix = f"palette_adapter.{i:03d}."
-                # for k, v in weights.items():
-                #     if not k.startswith(prefix):
-                #         continue
-                #     cross_attention_weights.append(v)
+            #     # prefix = f"palette_adapter.{i:03d}."
+            #     # for k, v in weights.items():
+            #     #     if not k.startswith(prefix):
+            #     #         continue
+            #     #     cross_attention_weights.append(v)
 
-                # assert len(cross_attention_weights) == 2
-                # cross_attn.load_weights(*cross_attention_weights)
+            #     # assert len(cross_attention_weights) == 2
+            #     # cross_attn.load_weights(*cross_attention_weights)
     @property
     def weights(self) -> List[Tensor]:
         weights: List[Tensor] = []
         for adapter in self.sub_adapters:
             weights.extend(adapter.weights)
         return weights
-
+    
+    def state_dict(self) -> dict[str, Tensor]:
+        state_dict = super().state_dict()
+        out : dict[str, Tensor]= {}
+        for weight_name in state_dict:
+            if "PaletteCrossAttentionAdapter" in weight_name and (
+                "Distribute.Chain_2.Linear.weight" in weight_name or "Distribute.Chain_1.Linear.weight" in weight_name
+            ):
+                out[weight_name] = state_dict[weight_name]
+        return out
+                
     def zero_init(self) -> None:
         weights = self.weights
         for weight in weights:

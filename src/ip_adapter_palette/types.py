@@ -27,6 +27,7 @@ class BatchInput(BaseBatch):
     source_pixel_sampling: Tensor
     source_spatial_tokens: Tensor
     source_random_embedding: Tensor
+    source_random_long_embedding: Tensor
     source_image_embedding: Tensor
     source_bw_image_embedding: Tensor
 
@@ -65,6 +66,7 @@ class BatchInputProcessed(BatchInput):
             source_pixel_sampling=item.source_pixel_sampling,
             source_spatial_tokens=item.source_spatial_tokens,
             source_random_embedding=item.source_random_embedding,
+            source_random_long_embedding=item.source_random_long_embedding,
             source_image_embedding=item.source_image_embedding,
             source_bw_image_embedding=item.source_bw_image_embedding,
             processed_image_embedding=uncond_img.repeat(len(item), 1, 1),
@@ -85,6 +87,7 @@ class BatchInputProcessed(BatchInput):
             source_pixel_sampling=item.source_pixel_sampling,
             source_spatial_tokens=item.source_spatial_tokens,
             source_random_embedding=item.source_random_embedding,
+            source_random_long_embedding=item.source_random_long_embedding,
             source_image_embedding=item.source_image_embedding,
             source_bw_image_embedding=item.source_bw_image_embedding,
             processed_text_embedding=item.source_text_embedding,

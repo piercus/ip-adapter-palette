@@ -7,6 +7,7 @@ from refiners.training_utils.common import (
 from refiners.fluxion.utils import save_to_safetensors
 from refiners.training_utils.callback import Callback, CallbackConfig
 from loguru import logger
+import regex
 from torch import norm, nn
 from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
@@ -22,7 +23,8 @@ class TimestepLossRescalerConfig(CallbackConfig):
 class MonitorGradientConfig(CallbackConfig):
     patterns: list[str] = []
     total: bool = True
-    cross_attention_ratios: bool = True
+    cross_attention: bool = True
+    layer_grad_norm: bool = True
 
 class OffloadToCPU(Callback[Any]):
     def __init__(self, config: OffloadToCPUConfig) -> None:
@@ -174,11 +176,10 @@ class MonitorTime(Callback[Any]):
         self.data.cancel()
 
 from fnmatch import fnmatch
-
+import re
 class MonitorGradient(Callback[Any]):
     def __init__(self, config: MonitorGradientConfig) -> None:
         self.config = config
-        self.cross_attention_ratios = config.cross_attention_ratios
         super().__init__()
     
     def per_layer_learnable_parameters(self, models: dict[str, TorchModule]) -> dict[str, nn.Parameter]:
@@ -194,31 +195,54 @@ class MonitorGradient(Callback[Any]):
     def on_optimizer_step_begin(self, trainer: "PaletteTrainer") -> None:
         layer_learnable_parameters = self.per_layer_learnable_parameters(trainer.models) # type: ignore
 
-        layer_norms: dict[str, float] = {}
+        layer_grad_norms: dict[str, float] = {}
+        layer_weights_norms: dict[str, float] = {}
 
-        for layer_name in layer_learnable_parameters:
-            param = layer_learnable_parameters[layer_name]
-            for pattern in self.config.patterns:
-                if fnmatch(layer_name, pattern) and param.grad is not None:
-                    norm = compute_grad_norm([param])
-                    layer_norms[layer_name] = norm
-                    trainer.wandb_log(data={f"layer_grad_norm/{layer_name}": norm})
-        
+        if self.config.cross_attention or self.config.layer_grad_norm:
+            for layer_name in layer_learnable_parameters:
+                param = layer_learnable_parameters[layer_name]
+                for pattern in self.config.patterns:
+                    if fnmatch(layer_name, pattern) and param.grad is not None:
+                        layer_grad_norms[layer_name] = compute_grad_norm([param])
+                        layer_weights_norms[layer_name] = param.norm() # type: ignore
+            
+        if self.config.layer_grad_norm:
+            for name in layer_grad_norms:
+                trainer.wandb_log(data={f"layer_grad_norm/{name}": layer_grad_norms[name]})
+
         if self.config.total:
             trainer.wandb_log(data={"grad_norm": trainer.total_gradient_norm})
 
         eps = 1e-8
 
-        if self.cross_attention_ratios:
+        if self.config.cross_attention:
             cross_attention_layer_info = [{
                 "prefix" : name.split("CrossAttentionBlock")[0],
                 "type": "key" if name.endswith("Chain_1.Linear.weight") else "value",
-                "norm": layer_norms[name]
-            } for name in layer_norms if "CrossAttentionBlock" in name]
+                "grad_norm": layer_grad_norms[name],
+                "weights_norm": layer_weights_norms[name],
+            } for name in layer_grad_norms if "CrossAttentionBlock" in name]
             # group by prefix
             prefixes = set([layer["prefix"] for layer in cross_attention_layer_info])
-            cross_attention_infos : dict[str, float] = {}
+            # in general all the prefixes looks the same like 
+            # ip_adapter.SD1UNet.UpBlocks.Chain_8.CLIPLCrossAttention.Chain_2. 
+            # ip_adapter.SD1UNet.UpBlocks.Chain_10.CLIPLCrossAttention.Chain_2. 
+            # ip_adapter.SD1UNet.Sum.MiddleBlock.CLIPLCrossAttention.Chain_2.
+            # ip_adapter.SD1UNet.DownBlocks.Chain_8.CLIPLCrossAttention.Chain_2.
+            # rename those to
+            # UpBlocks8, UpBlocks10, MiddleBlock, DownBlocks8
+            pattern = r"ip_adapter\.SD1UNet\.(Sum\.)?(UpBlocks|MiddleBlock|DownBlocks)(\.Chain_(\d+))?\.CLIPLCrossAttention\.Chain_2\."
+            names : list[str] = []
             for prefix in prefixes:
+                match = re.match(pattern, prefix)
+                if match is None:
+                    raise ValueError(f"Prefix {prefix} does not match the pattern {pattern}")
+                else:
+                    name = f"{match[2]}{match[4]}" if match[4] is not None else match[2]
+                    names.append(name)
+
+            for index, prefix in enumerate(prefixes):
+                name = names[index]
                 layers = [layer for layer in cross_attention_layer_info if layer["prefix"] == prefix]
                 if len(layers) != 2:
                     raise ValueError(f"Expected 2 layers for prefix {prefix}, got {len(layers)}")
@@ -227,12 +251,13 @@ class MonitorGradient(Callback[Any]):
                 
                 key_layer = layers[0] if layers[0]["type"] == "key" else layers[1]
                 value_layer = layers[0] if layers[0]["type"] == "value" else layers[1]
-                cross_attention_infos[prefix] = key_layer["norm"]/(value_layer["norm"] + eps)
 
-            for name in cross_attention_infos:
-                trainer.wandb_log(data={f"cross_attention_ratios/{name}": cross_attention_infos[name]})
+                trainer.wandb_log(data={
+                    f"cross_attentions/{name}_grad_ratio": key_layer["grad_norm"]/(value_layer["grad_norm"] + eps),
+                    f"cross_attentions/{name}_weights_norm": key_layer["weights_norm"] + value_layer["weights_norm"]
+                })
 
-
+            
 import math 
 from torch import Tensor, exp
 class TimestepLossRescaler(Callback[Any]):

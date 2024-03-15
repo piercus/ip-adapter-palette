@@ -70,6 +70,7 @@ def build_results(batch: BatchInput, result_latents: Tensor, trainer: 'PaletteTr
         source_image_embedding=batch.source_image_embedding,
         source_bw_image_embedding=batch.source_bw_image_embedding,
         source_random_embedding=batch.source_random_embedding,
+        source_random_long_embedding=batch.source_random_long_embedding,
         source_latents=batch.source_latents,
         result_histograms = trainer.histogram_extractor.images_to_histograms(result_images),
         result_latents = result_latents,

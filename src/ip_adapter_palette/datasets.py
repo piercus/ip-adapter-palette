@@ -18,7 +18,7 @@ from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from datasets import load_dataset, DownloadManager, Image as DatasetImage # type: ignore
 import os
-from torch import save, load, Tensor, rand
+from torch import save, load, Tensor, randn
 from PIL import Image
 from pathlib import Path
 from loguru import logger
@@ -199,7 +199,8 @@ class EmbeddableDataset(Dataset[BatchInput]):
             source_text_embedding = text_encoder(source_prompts),
             source_image_embedding = image_encoder(processed_images),
             source_bw_image_embedding = image_encoder(self.remove_colors(processed_images)),
-            source_random_embedding = rand((1, 77, 768)),
+            source_random_embedding = randn((1, 77, 768)),
+            source_random_long_embedding = randn((1, 2048, 10)),
             source_latents = lda.images_to_latents(processed_images),
             source_histograms = histogram_extractor.images_to_histograms(processed_images),
             source_pixel_sampling = source_pixel_sampling,

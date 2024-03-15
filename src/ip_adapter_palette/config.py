@@ -68,11 +68,25 @@ class GenericEncoderConfig(ModelConfig):
     num_attention_heads: int = 2
     feedforward_dim: int = 20
     mode: str = 'transformer'
+    input_dim: int = 768
 
 class Config(BaseConfig):
     latent_diffusion: LatentDiffusionConfig
     data: Path
-    mode: Literal["text_embedding", "palette", "histogram", "pixel_sampling", "spatial_palette", "random_embedding", "image_embedding", "bw_image_embedding"]
+    mode: Literal[
+        "text_embedding", 
+        "palette", 
+        "histogram", 
+        "pixel_sampling", 
+        "spatial_palette", 
+        "random_embedding", 
+        "image_embedding", 
+        "bw_image_embedding",
+        "image_embedding_diff",
+        "random_long_embedding",
+        "random_short_embedding",
+        "random_small_embedding",
+    ]
     dataset: CustomHuggingfaceDatasetConfig
     eval_dataset: CustomHuggingfaceDatasetConfig
     grid_evaluation: GridEvaluationConfig
