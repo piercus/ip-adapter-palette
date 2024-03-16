@@ -4,8 +4,8 @@ mode = "random_long_embedding"
 mode = "online" # "online", "offline", "disabled"
 entity = "piercus"
 project = "color-palette"
-name = "rnd-long-resized-to-16-0-layer-uncond-1.0"
-tags = ["200db", "random-long-small8-embedding", "resized-input-len-16", "uncond-1.0"]
+name = "rnd-long-resized-pre-mlp-to-16-0-layer-uncond-1.0"
+tags = ["200db", "random-long-small8-embedding", "resized-pre-mlp-input-len-16", "uncond-1.0"]
 
 [sd]
 unet = "weights/models/unet.safetensors"

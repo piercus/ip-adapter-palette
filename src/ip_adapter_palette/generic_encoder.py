@@ -137,13 +137,23 @@ class GenericEncoder(fl.Chain):
     ) -> None:
         empty = True
         if output_len is not None:
-            encoder_head = CrossAttentionChangeLength(
-                embedding_dim=embedding_dim,
-                input_dim=input_dim,
-                inner_dim=feedforward_dim,
-                output_len=output_len,
-                device=device,
-                dtype=dtype
+            encoder_head = fl.Chain(
+                MLPEncoder(
+                    embedding_dim=feedforward_dim,
+                    num_layers=1,
+                    feedforward_dim=feedforward_dim,
+                    layer_norm_eps=layer_norm_eps,
+                    device=device,
+                    dtype=dtype
+                ),
+                CrossAttentionChangeLength(
+                    embedding_dim=embedding_dim,
+                    input_dim=feedforward_dim,
+                    inner_dim=feedforward_dim,
+                    output_len=output_len,
+                    device=device,
+                    dtype=dtype
+                )
             )
             empty = False
         elif input_dim != embedding_dim:
@@ -165,15 +175,13 @@ class GenericEncoder(fl.Chain):
             )
         elif mode == 'mlp' and num_layers > 0:
             empty = False
-            encoder_body = fl.Chain(
-                MLPEncoder(
-                    embedding_dim=embedding_dim,
-                    num_layers=num_layers,
-                    feedforward_dim=feedforward_dim,
-                    layer_norm_eps=layer_norm_eps,
-                    device=device,
-                    dtype=dtype
-                ),
+            encoder_body = MLPEncoder(
+                embedding_dim=embedding_dim,
+                num_layers=num_layers,
+                feedforward_dim=feedforward_dim,
+                layer_norm_eps=layer_norm_eps,
+                device=device,
+                dtype=dtype
             )
         else: 
             encoder_body = fl.Identity()
