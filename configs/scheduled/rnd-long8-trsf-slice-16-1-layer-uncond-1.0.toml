@@ -4,8 +4,8 @@ mode = "random_long_embedding"
 mode = "disabled" # "online", "offline", "disabled"
 entity = "piercus"
 project = "color-palette"
-name = "rnd-long8-trsf-slice-16-2-layer-uncond-1.0"
-tags = ["200db", "random-long8-embedding", "trsf-slice-16", "2-layer-trsf", "uncond-1.0"]
+name = "rnd-long8-trsf-slice-16-1-layer-uncond-1.0"
+tags = ["200db", "random-long8-embedding", "trsf-slice-16", "1-layer-trsf", "uncond-1.0"]
 
 [sd]
 unet = "weights/models/unet.safetensors"
@@ -89,7 +89,7 @@ scale = 0
 overwrite = true
 
 [generic_encoder]
-num_layers = 2
+num_layers = 1
 embedding_dim = 768
 feedforward_dim = 256
 input_dim = 8
