@@ -54,6 +54,96 @@ class TransformerEncoder(fl.Chain):
             )
         )
 
+class NonCausalTransformerLayer(fl.Chain):
+    def __init__(
+        self,
+        embedding_dim: int,
+        feedforward_dim: int,
+        num_attention_heads: int = 1,
+        layer_norm_eps: float = 1e-5,
+        device: Device | str | None = None,
+        dtype: DType | None = None,
+    ) -> None:
+        self.embedding_dim = embedding_dim
+        self.num_attention_heads = num_attention_heads
+        self.feedforward_dim = feedforward_dim
+        self.layer_norm_eps = layer_norm_eps
+        super().__init__(
+            fl.Residual(
+                fl.LayerNorm(
+                    normalized_shape=embedding_dim,
+                    eps=layer_norm_eps,
+                    device=device,
+                    dtype=dtype,
+                ),
+                fl.SelfAttention(
+                    embedding_dim=embedding_dim,
+                    num_heads=num_attention_heads,
+                    is_causal=False,
+                    device=device,
+                    dtype=dtype,
+                ),
+            ),
+            fl.Residual(
+                fl.LayerNorm(
+                    normalized_shape=embedding_dim,
+                    eps=layer_norm_eps,
+                    device=device,
+                    dtype=dtype,
+                ),
+                FeedForward(
+                    embedding_dim=embedding_dim,
+                    feedforward_dim=feedforward_dim,
+                    device=device,
+                    dtype=dtype,
+                ),
+            ),
+        )
+
+class TransformerEncoderChangeLength(fl.Chain):
+
+    def __init__(
+        self,
+        embedding_dim: int = 768,
+        output_length: int = 16,
+        num_layers: int = 2,
+        num_attention_heads: int = 2,
+        feedforward_dim: int = 20,
+        layer_norm_eps: float = 1e-5,
+        device: Device | str | None = None,
+        dtype: DType | None = None,
+    ) -> None:
+        # self._lda = [lda]
+        self.embedding_dim = embedding_dim
+        self.num_layers = num_layers
+        self.num_attention_heads = num_attention_heads
+        self.feedforward_dim = feedforward_dim
+        self.layer_norm_eps = layer_norm_eps
+        self.output_length = output_length
+        super().__init__(
+            fl.Concatenate(
+                fl.Parameter(output_length, embedding_dim),
+                fl.Identity(),
+                dim=1
+            ),
+            *(
+                # Remark :
+                # The current transformer layer has a causal self-attention
+                # It would be fair to test non-causal self-attention
+                NonCausalTransformerLayer(
+                    embedding_dim=embedding_dim,
+                    num_attention_heads=num_attention_heads,
+                    feedforward_dim=feedforward_dim,
+                    layer_norm_eps=layer_norm_eps,
+                    device=device,
+                    dtype=dtype,
+                )
+                for _ in range(num_layers)
+            ),
+            fl.Slicing(dim=1, end=output_length)
+        )
+
+
 class MLPEncoder(fl.Chain):
 
     def __init__(
@@ -136,28 +226,7 @@ class GenericEncoder(fl.Chain):
         dtype: DType | None = None,
     ) -> None:
         empty = True
-        if output_len is not None:
-            encoder_head = fl.Chain(
-                fl.Linear(in_features=input_dim, out_features=feedforward_dim, bias=False, device=device, dtype=dtype),
-                MLPEncoder(
-                    embedding_dim=feedforward_dim,
-                    num_layers=1,
-                    feedforward_dim=feedforward_dim,
-                    layer_norm_eps=layer_norm_eps,
-                    device=device,
-                    dtype=dtype
-                ),
-                CrossAttentionChangeLength(
-                    embedding_dim=embedding_dim,
-                    input_dim=feedforward_dim,
-                    inner_dim=feedforward_dim,
-                    output_len=output_len,
-                    device=device,
-                    dtype=dtype
-                )
-            )
-            empty = False
-        elif input_dim != embedding_dim:
+        if input_dim != embedding_dim:
             encoder_head = fl.Linear(in_features=input_dim, out_features=embedding_dim, bias=False, device=device, dtype=dtype)
             empty = False
         else: 
@@ -165,15 +234,27 @@ class GenericEncoder(fl.Chain):
 
         if mode == 'transformer' and num_layers > 0:
             empty = False
-            encoder_body = TransformerEncoder(
-                embedding_dim=embedding_dim,
-                num_layers=num_layers,
-                num_attention_heads=num_attention_heads,
-                feedforward_dim=feedforward_dim,
-                layer_norm_eps=layer_norm_eps,
-                device=device,
-                dtype=dtype
-            )
+            if output_len is not None:
+                encoder_body = TransformerEncoderChangeLength(
+                    embedding_dim=embedding_dim,
+                    output_length=output_len,
+                    num_layers=num_layers,
+                    num_attention_heads=num_attention_heads,
+                    feedforward_dim=feedforward_dim,
+                    layer_norm_eps=layer_norm_eps,
+                    device=device,
+                    dtype=dtype
+                )
+            else:
+                encoder_body = TransformerEncoder(
+                    embedding_dim=embedding_dim,
+                    num_layers=num_layers,
+                    num_attention_heads=num_attention_heads,
+                    feedforward_dim=feedforward_dim,
+                    layer_norm_eps=layer_norm_eps,
+                    device=device,
+                    dtype=dtype
+                )
         elif mode == 'mlp' and num_layers > 0:
             empty = False
             encoder_body = MLPEncoder(
