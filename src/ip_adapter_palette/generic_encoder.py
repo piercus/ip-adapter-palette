@@ -138,6 +138,7 @@ class GenericEncoder(fl.Chain):
         empty = True
         if output_len is not None:
             encoder_head = fl.Chain(
+                fl.Linear(in_features=input_dim, out_features=feedforward_dim, bias=False, device=device, dtype=dtype),
                 MLPEncoder(
                     embedding_dim=feedforward_dim,
                     num_layers=1,

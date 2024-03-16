@@ -20,7 +20,7 @@ unconditional_sampling_probability = 1.0
 offset_noise = 0.1
 
 [training]
-duration = "800:epoch"
+duration = "1600:epoch"
 seed = 0
 batch_size = 20
 gradient_accumulation = "10:step"
