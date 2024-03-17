@@ -54,7 +54,7 @@ from refiners.training_utils.wandb import WandbMixin, WandbLoggable
 import torch
 from torch.nn import functional as F, Module as TorchModule
 from torchvision.transforms import Compose, RandomCrop, RandomHorizontalFlip, ColorJitter, RandomGrayscale # type: ignore
-from torch import Tensor, tensor, randn, cat, zeros
+from torch import Tensor, tensor, randn, cat, zeros, zeros_like
 from ip_adapter_palette.pixel_sampling import Sampler, Encoder
 from ip_adapter_palette.spatial_palette import SpatialPaletteEncoder, SpatialTokenizer
 from ip_adapter_palette.types import BatchInputProcessed, BatchInput
@@ -282,21 +282,11 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
     @cached_property
     def pixel_sampler(self) -> Sampler:
         return Sampler(
-            max_size=2048
-        )
-    
-    @cached_property
-    def pixel_sampling_encoder(self) -> Encoder:
-        return Encoder(
-            embedding_dim=self.config.palette_encoder.embedding_dim,
-            num_layers=self.config.palette_encoder.num_layers,
-            num_attention_heads=self.config.palette_encoder.num_attention_heads,
-            feedforward_dim=self.config.palette_encoder.feedforward_dim,
-            sampler=self.pixel_sampler,
-            mode=self.config.palette_encoder.mode,
+            max_size=2048,
             device=self.device,
             dtype=self.dtype
         )
+    
     @cached_property
     def spatial_tokenizer(self) -> SpatialTokenizer:
         return SpatialTokenizer(
@@ -362,7 +352,7 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
             case "histogram":
                 palette_embeddings = self.histogram_auto_encoder.encode_sequence(source_histograms)
             case "pixel_sampling":
-                palette_embeddings = self.pixel_sampling_encoder(source_pixel_sampling)
+                palette_embeddings = self.generic_encoder(source_pixel_sampling)
             case "spatial_palette":
                 palette_embeddings = self.spatial_palette_encoder(source_spatial_tokens)
             case "random_embedding":
@@ -467,8 +457,10 @@ class PaletteTrainer(Trainer[Config, BatchInputProcessed], WandbMixin, SD1Traine
                     )
                 )
             case "pixel_sampling":
-                sampling = cat(tensors=(batch.source_pixel_sampling, batch.source_pixel_sampling))
-                embedding = self.pixel_sampling_encoder(sampling)
+                unconditionnal = zeros_like(batch.source_pixel_sampling)
+
+                sampling = cat(tensors=(unconditionnal, batch.source_pixel_sampling))
+                embedding = self.generic_encoder(sampling)
                 
                 self.ip_adapter.set_palette_embedding(
                     embedding

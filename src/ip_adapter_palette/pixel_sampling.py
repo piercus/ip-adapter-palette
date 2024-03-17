@@ -4,18 +4,25 @@ from typing import Literal
 from ip_adapter_palette.types import Sample
 import numpy as np
 import refiners.fluxion.layers as fl
+
+from ip_adapter_palette.utils import preprocess_image
 SamplerMode = Literal['first', 'random']
 from torch import cat, Tensor, tensor, ones, device as Device, dtype as DType, zeros
 from jaxtyping import Float
 from torch.nn.functional import pad
 from ip_adapter_palette.palette_adapter import PaletteTransformerEncoder, PaletteMLPEncoder, ColorEncoder
+from refiners.fluxion.utils import image_to_tensor
 
 class Sampler(fl.Module):
     def __init__(
         self,
+        dtype: DType | None = None,
+        device: Device | str | None = None,
         max_size: int = 2048,
         mode: SamplerMode = 'first'
     ) -> None:
+        self.device = device
+        self.dtype = dtype
         self.max_size = max_size
         self.mode = mode
         super().__init__()
@@ -38,22 +45,22 @@ class Sampler(fl.Module):
         if size == 0:
             sample = zeros(1, 0, 3)
         elif self.mode == 'first':
-            frequency = (image.size[0] * image.size[1]) // (size-1)
-            pixels = list(image.getdata())[0::frequency]
-            if len(pixels) > size:
-                raise ValueError(f"Sample {pixels} is bigger than expected size {size}")
-            sample = tensor([pixels])
-        elif self.mode == 'random':
-            image_np = np.array(image).reshape(-1, 3)
-            pixels = image_np[np.random.choice(len(image_np), size, replace=False)].tolist()
-            sample = tensor([pixels])
+            image_tensor = preprocess_image(image, device=self.device, dtype=self.dtype)
+            frequency = ((image_tensor.shape[2] * image_tensor.shape[3]) // size) + 1
+            flat = image_tensor.reshape((-1,3))
+            sample = flat[0::frequency]
+            if sample.shape[0] > size:
+                raise ValueError(f"Sample {sample.shape} is bigger than expected size {size}")
+            sample = sample.unsqueeze(0)
+        else:
+            raise ValueError(f"Unknown mode {self.mode}")
 
         sample = self.add_channel(sample)
         sample = self.zero_right_padding(sample)
         return sample
 
     def add_channel(self, x: Float[Tensor, "*batch colors 3"]) -> Float[Tensor, "*batch colors_with_end 4"]:
-        return cat((x, ones(x.shape[0], x.shape[1], 1)), dim=2)
+        return cat((x, ones(x.shape[0], x.shape[1], 1, device=self.device, dtype=self.dtype)), dim=2)
 
     def zero_right_padding(
         self, x: Float[Tensor, "*batch colors_with_end embedding_dim"]

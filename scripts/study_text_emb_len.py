@@ -32,9 +32,9 @@ for file in files:
     data = torch.load(os.path.join(directory, file))
     
     # Calculate the shape of data.text_embeddings
-    print("source_text_embedding", tensor_infos(data['source_text_embedding'])["shape"])
+    print("source_text_embedding", tensor_infos(data['source_text_embedding'])["mean"])
 
-    print("source_pixel_sampling", tensor_infos(data['source_image_embedding'])["shape"])
+    print("source_pixel_sampling", tensor_infos(data['source_pixel_sampling'])["mean"])
 
 
 

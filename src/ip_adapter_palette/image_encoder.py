@@ -6,6 +6,7 @@ from refiners.fluxion.utils import image_to_tensor, normalize, load_from_safeten
 from PIL import Image
 from functools import cached_property
 from refiners.foundationals.latent_diffusion.image_prompt import PerceiverResampler
+from ip_adapter_palette.utils import preprocess_image
 
 class ImageEncoder(fl.Module):
 
@@ -55,7 +56,7 @@ class ImageEncoder(fl.Module):
         self.image_proj.requires_grad_(False)
 
     def forward(self, images: list[Image.Image]) -> Tensor:
-        img_tensor = cat([self.preprocess_image(image) for image in images])
+        img_tensor = cat([preprocess_image(image, device=self.device, dtype=self.dtype) for image in images])
         return self.from_tensor(img_tensor)
     
     def from_tensor(self, img_tensor: Tensor) -> Tensor:
@@ -95,28 +96,3 @@ class ImageEncoder(fl.Module):
         self.clip_image_encoder.to(device=device, dtype=dtype)
         self.image_proj.to(device=device, dtype=dtype)
         return super().to(device=device, dtype=dtype)
-
-    def preprocess_image(
-        self,
-        image: Image.Image,
-        size: tuple[int, int] = (224, 224),
-        mean: list[float] | None = None,
-        std: list[float] | None = None,
-    ) -> Tensor:
-        """Preprocess the image.
-
-        Note:
-            The default mean and std are parameters from
-            https://github.com/openai/CLIP
-
-        Args:
-            image: The image to preprocess.
-            size: The size to resize the image to.
-            mean: The mean to use for normalization.
-            std: The standard deviation to use for normalization.
-        """
-        return normalize(
-            image_to_tensor(image.resize(size), device=self.device, dtype=self.dtype),
-            mean=[0.48145466, 0.4578275, 0.40821073] if mean is None else mean,
-            std=[0.26862954, 0.26130258, 0.27577711] if std is None else std,
-        )

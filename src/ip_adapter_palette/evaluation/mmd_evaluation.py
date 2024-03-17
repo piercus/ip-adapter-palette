@@ -37,6 +37,8 @@ from refiners.foundationals.latent_diffusion import LatentDiffusionAutoencoder
 from refiners.fluxion.utils import image_to_tensor, normalize
 from refiners.foundationals.clip.image_encoder import CLIPImageEncoderH
 from typing import TYPE_CHECKING
+
+from ip_adapter_palette.utils import preprocess_image
 if TYPE_CHECKING:
     from ip_adapter_palette.trainer import PaletteTrainer
 
@@ -65,32 +67,8 @@ class MmdEvaluationCallback(Callback[Any]):
         )
     
     def encode_images(self, images: list[Image.Image]) -> Tensor:
-        return self.clip_image_encoder(cat([self.preprocess_image(image) for image in images]))
+        return self.clip_image_encoder(cat([preprocess_image(image, device=self.device, dtype=self.dtype) for image in images]))
     
-    def preprocess_image(
-        self,
-        image: Image.Image,
-        size: tuple[int, int] = (224, 224),
-        mean: list[float] | None = None,
-        std: list[float] | None = None,
-    ) -> Tensor:
-        """Preprocess the image.
-
-        Note:
-            The default mean and std are parameters from
-            https://github.com/openai/CLIP
-
-        Args:
-            image: The image to preprocess.
-            size: The size to resize the image to.
-            mean: The mean to use for normalization.
-            std: The standard deviation to use for normalization.
-        """
-        return normalize(
-            image_to_tensor(image.resize(size), dtype = self.dtype, device = self.device),
-            mean=[0.48145466, 0.4578275, 0.40821073] if mean is None else mean,
-            std=[0.26862954, 0.26130258, 0.27577711] if std is None else std,
-        )
     @cached_property
     def lda(self) -> LatentDiffusionAutoencoder:
         return self.trainer.lda

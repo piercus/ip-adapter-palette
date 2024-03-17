@@ -105,7 +105,7 @@ class TransformerEncoderChangeLength(fl.Chain):
     def __init__(
         self,
         embedding_dim: int = 768,
-        output_length: int = 16,
+        output_len: int = 16,
         num_layers: int = 2,
         num_attention_heads: int = 2,
         feedforward_dim: int = 20,
@@ -119,10 +119,10 @@ class TransformerEncoderChangeLength(fl.Chain):
         self.num_attention_heads = num_attention_heads
         self.feedforward_dim = feedforward_dim
         self.layer_norm_eps = layer_norm_eps
-        self.output_length = output_length
+        self.output_len = output_len
         super().__init__(
             fl.Concatenate(
-                fl.Parameter(output_length, embedding_dim),
+                fl.Parameter(output_len, embedding_dim),
                 fl.Identity(),
                 dim=1
             ),
@@ -140,7 +140,7 @@ class TransformerEncoderChangeLength(fl.Chain):
                 )
                 for _ in range(num_layers)
             ),
-            fl.Slicing(dim=1, end=output_length)
+            fl.Slicing(dim=1, end=output_len)
         )
 
 
@@ -237,7 +237,7 @@ class GenericEncoder(fl.Chain):
             if output_len is not None:
                 encoder_body = TransformerEncoderChangeLength(
                     embedding_dim=embedding_dim,
-                    output_length=output_len,
+                    output_len=output_len,
                     num_layers=num_layers,
                     num_attention_heads=num_attention_heads,
                     feedforward_dim=feedforward_dim,

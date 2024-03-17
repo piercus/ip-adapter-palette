@@ -32,7 +32,7 @@ class PaletteEncoderConfig(ModelConfig):
     weights: Path | None = None
     feedforward_dim: int = 2
     num_attention_heads: int = 2 # 12, reduced for embedding_dim=768
-    num_layers: int = 1
+    num_layers: int = 0
     trigger_phrase: str = ""
     use_only_trigger_probability: float = 0.0
     max_colors: int = 8

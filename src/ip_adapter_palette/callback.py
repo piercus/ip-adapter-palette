@@ -34,13 +34,13 @@ class OffloadToCPU(Callback[Any]):
         if self.config.use:
             trainer.sd.lda.to(trainer.device)
             trainer.text_encoder.to(trainer.device)
-            trainer.image_encoder.to(trainer.device)
+            #trainer.image_encoder.to(trainer.device)
 
     def on_evaluation_end(self, trainer: "PaletteTrainer") -> None:
         if self.config.use:
             trainer.sd.lda.to("cpu")
             trainer.text_encoder.to("cpu")
-            trainer.image_encoder.to("cpu")
+            #trainer.image_encoder.to("cpu")
 
     # def on_train_begin(self, trainer: "PaletteTrainer") -> None:
     #     trainer.ip_adapter.inject()
