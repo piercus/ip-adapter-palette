@@ -20,7 +20,7 @@ unconditional_sampling_probability = 1.0
 offset_noise = 0.1
 
 [training]
-duration = "400:epoch"
+duration = "1200:epoch"
 seed = 0
 batch_size = 20
 gradient_accumulation = "10:step"
@@ -90,7 +90,7 @@ overwrite = true
 
 [generic_encoder]
 num_layers = 0
-embedding_dim = 3
+embedding_dim = 4
 feedforward_dim = 256
 input_dim = 4
 mode='mlp'

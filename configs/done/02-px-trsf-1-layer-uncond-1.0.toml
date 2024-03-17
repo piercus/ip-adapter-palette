@@ -4,7 +4,7 @@ mode = "pixel_sampling"
 mode = "online" # "online", "offline", "disabled"
 entity = "piercus"
 project = "color-palette"
-name = "px-no-layer-uncond-1.0"
+name = "px-trsf-1-layer-uncond-1.0"
 tags = ["200db", "trsf-1-layer", "output-16", "uncond-1.0"]
 
 [sd]
